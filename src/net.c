@@ -297,13 +297,22 @@ net_get_fd(net_socket_t *sock)
         return sock ? sock->fd : -1;
 }
 
+#include <netdb.h>
+
 bool
-net_parse_ipv4(const char *ip_str, uint32_t *ip)
+net_resolve_ipv4(const char *hostname, uint32_t *ip)
 {
-        struct in_addr addr;
-        if (inet_pton(AF_INET, ip_str, &addr) != 1)
+        struct addrinfo hints, *res;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+
+        if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
                 return false;
-        *ip = addr.s_addr;
+        }
+
+        struct sockaddr_in *ipv4 = (struct sockaddr_in *)res->ai_addr;
+        *ip = ipv4->sin_addr.s_addr;
+        freeaddrinfo(res);
         return true;
 }
 

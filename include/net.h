@@ -26,7 +26,7 @@ ssize_t net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
 
 int net_get_fd(net_socket_t *sock);
 
-bool net_parse_ipv4(const char *ip_str, uint32_t *ip);
+bool net_resolve_ipv4(const char *hostname, uint32_t *ip);
 bool net_parse_mac(const char *mac_str, uint8_t *mac);
 bool net_get_default_gateway(const char *iface, uint32_t *gateway_ip);
 

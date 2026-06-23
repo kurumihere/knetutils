@@ -120,8 +120,8 @@ arping_cli_main(int argc, char *argv[])
         if (config.dad) {
                 config.source_ip = 0;
         } else if (source_ip_str) {
-                if (!net_parse_ipv4(source_ip_str, &config.source_ip)) {
-                        die("Invalid source IP address: %s", source_ip_str);
+                if (!net_resolve_ipv4(source_ip_str, &config.source_ip)) {
+                        die("Invalid source IP address or hostname: %s", source_ip_str);
                 }
         } else {
                 if (!net_get_iface_ip(config.iface, &config.source_ip)) {
@@ -146,8 +146,9 @@ arping_cli_main(int argc, char *argv[])
                         return EXIT_FAILURE;
                 }
                 const char *target_ip_str = argv[optind];
-                if (!net_parse_ipv4(target_ip_str, &config.target_ip)) {
-                        die("Invalid target IP address: %s", target_ip_str);
+                if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
+                        die("Invalid target IP address or hostname: %s",
+                            target_ip_str);
                 }
         }
 

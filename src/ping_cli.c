@@ -22,6 +22,8 @@ print_usage(const char *prog_name)
                         "sending each packet\n");
         fprintf(stderr, "  -u <unit>       Time unit for output (ns, us, ms). "
                         "Default: auto-scaling\n");
+        fprintf(stderr, "  -s <size>       Payload size in bytes\n");
+        fprintf(stderr, "  -t <ttl>        Time to live (TTL)\n");
         fprintf(stderr, "  -q              Quiet output\n");
         fprintf(stderr, "  -h              Print this help\n");
 }
@@ -35,9 +37,11 @@ ping_cli_main(int argc, char *argv[])
         config.count = 0;
         config.timeout_ns = 1000000000ULL;
         config.interval_ns = 1000000000ULL;
+        config.payload_size = 56;
+        config.ttl = 0;
 
         int opt;
-        while ((opt = getopt(argc, argv, "c:w:i:u:qh")) != -1) {
+        while ((opt = getopt(argc, argv, "c:w:i:u:s:t:qh")) != -1) {
                 switch (opt) {
                 case 'c':
                         config.count = (uint32_t)atoi(optarg);
@@ -51,6 +55,12 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'u':
                         config.time_unit = optarg;
+                        break;
+                case 's':
+                        config.payload_size = (uint32_t)atoi(optarg);
+                        break;
+                case 't':
+                        config.ttl = (uint8_t)atoi(optarg);
                         break;
                 case 'q':
                         config.quiet = true;
@@ -71,8 +81,8 @@ ping_cli_main(int argc, char *argv[])
         }
 
         const char *target_ip_str = argv[optind];
-        if (!net_parse_ipv4(target_ip_str, &config.target_ip)) {
-                die("Invalid target IP address: %s", target_ip_str);
+        if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
+                die("Invalid target IP address or hostname: %s", target_ip_str);
         }
 
         if (getuid() != 0) {

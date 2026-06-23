@@ -9,6 +9,8 @@ typedef struct {
         uint32_t count;
         uint64_t timeout_ns;
         uint64_t interval_ns;
+        uint32_t payload_size;
+        uint8_t ttl;
         bool quiet;
         const char *time_unit;
 } ping_config_t;

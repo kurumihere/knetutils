@@ -48,12 +48,21 @@ ping_run(const ping_config_t *config)
                 die("Failed to open ICMP socket. Are you root?");
         }
 
+        if (config->ttl > 0) {
+                int ttl = config->ttl;
+                setsockopt(net_get_fd(sock), IPPROTO_IP, IP_TTL, &ttl,
+                           sizeof(ttl));
+        }
+
         struct in_addr target_in = {.s_addr = config->target_ip};
         char target_str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &target_in, target_str, sizeof(target_str));
 
+        uint32_t total_len = sizeof(struct icmp) + config->payload_size;
+
         if (!config->quiet) {
-                printf("PING %s: 64 data bytes\n", target_str);
+                printf("PING %s: %u data bytes\n", target_str,
+                       config->payload_size);
         }
 
         uint16_t pid = getpid() & 0xFFFF;
@@ -61,36 +70,47 @@ ping_run(const ping_config_t *config)
         uint32_t received = 0;
         uint16_t seq = 1;
 
+        uint64_t rtt_min = 0, rtt_max = 0, rtt_sum = 0;
+
         struct pollfd pfd;
         pfd.fd = net_get_fd(sock);
         pfd.events = POLLIN;
+
+        uint64_t next_send = get_time_ns();
 
         while (keep_running) {
                 if (config->count > 0 && sent >= config->count) {
                         break;
                 }
 
-                uint8_t packet[64];
-                memset(packet, 0, sizeof(packet));
+                uint8_t *packet = calloc(1, total_len);
+                if (!packet)
+                        die("Memory allocation failed");
+
                 struct icmp *icp = (struct icmp *)packet;
                 icp->icmp_type = ICMP_ECHO;
                 icp->icmp_code = 0;
                 icp->icmp_id = htons(pid);
                 icp->icmp_seq = htons(seq);
 
-                uint64_t *timestamp = (uint64_t *)(packet + 8);
-                *timestamp = get_time_ns();
+                if (config->payload_size >= 8) {
+                        uint64_t *timestamp =
+                            (uint64_t *)(packet + sizeof(struct icmp));
+                        *timestamp = get_time_ns();
+                }
 
-                icp->icmp_cksum = icmp_checksum(packet, sizeof(packet));
+                icp->icmp_cksum = icmp_checksum(packet, total_len);
 
-                if (net_send_icmp_packet(sock, packet, sizeof(packet),
+                if (net_send_icmp_packet(sock, packet, total_len,
                                          config->target_ip) < 0) {
                         log_err("Failed to send ICMP packet: %s",
                                 strerror(errno));
                 } else {
                         sent++;
                 }
+                free(packet);
 
+                next_send += config->interval_ns;
                 uint64_t expire = get_time_ns() + config->timeout_ns;
                 bool replied = false;
 
@@ -126,10 +146,30 @@ ping_run(const ping_config_t *config)
                                     r_icp->icmp_id == htons(pid) &&
                                     r_icp->icmp_seq == htons(seq)) {
                                         uint64_t recv_time = get_time_ns();
-                                        uint64_t *orig_timestamp =
-                                            (uint64_t *)(recv_buf + hlen + 8);
-                                        uint64_t rtt =
-                                            recv_time - *orig_timestamp;
+                                        uint64_t rtt = 0;
+
+                                        if (config->payload_size >= 8 &&
+                                            n >= (ssize_t)(hlen +
+                                                           sizeof(struct icmp) +
+                                                           8)) {
+                                                uint64_t *orig_timestamp =
+                                                    (uint64_t
+                                                         *)(recv_buf + hlen +
+                                                            sizeof(
+                                                                struct icmp));
+                                                rtt =
+                                                    recv_time - *orig_timestamp;
+                                        }
+
+                                        if (received == 0) {
+                                                rtt_min = rtt_max = rtt;
+                                        } else {
+                                                if (rtt < rtt_min)
+                                                        rtt_min = rtt;
+                                                if (rtt > rtt_max)
+                                                        rtt_max = rtt;
+                                        }
+                                        rtt_sum += rtt;
 
                                         struct in_addr src_in = {.s_addr =
                                                                      src_ip};
@@ -138,18 +178,21 @@ ping_run(const ping_config_t *config)
                                                   sizeof(src_str));
 
                                         if (!config->quiet) {
-                                                char time_buf[64];
+                                                char time_buf[64] = "N/A";
+                                                if (config->payload_size >= 8) {
+                                                        format_time(
+                                                            rtt,
+                                                            config->time_unit,
+                                                            time_buf,
+                                                            sizeof(time_buf));
+                                                }
                                                 printf("%zd bytes from %s: "
                                                        "icmp_seq=%u ttl=%d "
                                                        "time=%s\n",
                                                        n - hlen, src_str,
                                                        ntohs(r_icp->icmp_seq),
                                                        ip_hdr->ip_ttl,
-                                                       format_time(
-                                                           rtt,
-                                                           config->time_unit,
-                                                           time_buf,
-                                                           sizeof(time_buf)));
+                                                       time_buf);
                                         }
 
                                         received++;
@@ -166,8 +209,13 @@ ping_run(const ping_config_t *config)
                         printf("Timeout waiting for reply\n");
                 }
 
+                seq++;
+
                 if (keep_running && sent < config->count) {
-                        usleep(config->interval_ns / 1000);
+                        uint64_t now = get_time_ns();
+                        if (now < next_send) {
+                                usleep((next_send - now) / 1000);
+                        }
                 }
         }
 
@@ -177,6 +225,18 @@ ping_run(const ping_config_t *config)
         printf(
             "%u packets transmitted, %u packets received, %d%% packet loss\n",
             sent, received, sent == 0 ? 0 : ((sent - received) * 100) / sent);
+
+        if (received > 0 && config->payload_size >= 8) {
+                char min_buf[64], avg_buf[64], max_buf[64];
+                format_time(rtt_min, config->time_unit, min_buf,
+                            sizeof(min_buf));
+                format_time(rtt_sum / received, config->time_unit, avg_buf,
+                            sizeof(avg_buf));
+                format_time(rtt_max, config->time_unit, max_buf,
+                            sizeof(max_buf));
+                printf("rtt min/avg/max = %s/%s/%s\n", min_buf, avg_buf,
+                       max_buf);
+        }
 
         return (received > 0) ? 0 : 1;
 }
