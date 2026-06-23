@@ -138,6 +138,7 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
         sock->ifindex = ifindex;
         return sock;
 #else
+        (void)protocol;
         int fd = -1;
         char bpf_path[32];
         for (int i = 0; i < 256; i++) {
