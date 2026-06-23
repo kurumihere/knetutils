@@ -6,17 +6,21 @@ SRC_DIR := src
 OBJ_DIR := obj
 BIN_DIR := bin
 
-TARGET := $(BIN_DIR)/arping
+TARGET := $(BIN_DIR)/knetutils
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
-.PHONY: all clean test
+.PHONY: all clean links
 
-all: $(TARGET)
+all: $(TARGET) links
 
 $(TARGET): $(OBJS) | $(BIN_DIR)
 	$(CC) $(LDFLAGS) $^ -o $@
+
+links: $(TARGET)
+	ln -sf knetutils $(BIN_DIR)/arping
+	ln -sf knetutils $(BIN_DIR)/ping
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@

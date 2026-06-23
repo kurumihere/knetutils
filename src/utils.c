@@ -88,7 +88,6 @@ format_time(uint64_t time_ns, const char *unit_choice, char *buf,
                 }
         }
 
-
         if (time_ns < 1000) {
                 snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
         } else if (time_ns < 1000000) {

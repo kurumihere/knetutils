@@ -187,6 +187,25 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
 #endif
 }
 
+net_socket_t *
+net_open_icmp_socket(void)
+{
+        int fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+        if (fd < 0)
+                return NULL;
+        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        if (!sock) {
+                close(fd);
+                return NULL;
+        }
+        sock->fd = fd;
+#ifndef __linux__
+        sock->bpf_buf = NULL;
+        sock->bpf_buf_len = 0;
+#endif
+        return sock;
+}
+
 void
 net_close_raw_socket(net_socket_t *sock)
 {
@@ -244,6 +263,32 @@ net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 
         return packet_len;
 #endif
+}
+
+ssize_t
+net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
+                     uint32_t dst_ip)
+{
+        struct sockaddr_in dest;
+        memset(&dest, 0, sizeof(dest));
+        dest.sin_family = AF_INET;
+        dest.sin_addr.s_addr = dst_ip;
+        return sendto(sock->fd, buf, len, 0, (struct sockaddr *)&dest,
+                      sizeof(dest));
+}
+
+ssize_t
+net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
+                     uint32_t *src_ip)
+{
+        struct sockaddr_in src;
+        socklen_t src_len = sizeof(src);
+        ssize_t n =
+            recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)&src, &src_len);
+        if (n > 0 && src_ip) {
+                *src_ip = src.sin_addr.s_addr;
+        }
+        return n;
 }
 
 int
