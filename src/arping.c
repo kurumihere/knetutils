@@ -10,7 +10,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
+
+#ifndef ETH_P_ARP
+#define ETH_P_ARP ETHERTYPE_ARP
+#endif
+
+#ifndef ETH_P_IP
+#define ETH_P_IP ETHERTYPE_IP
+#endif
 
 static volatile bool keep_running = true;
 

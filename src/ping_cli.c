@@ -40,9 +40,17 @@ ping_cli_main(int argc, char *argv[])
         config.payload_size = 56;
         config.ttl = 0;
 
+        config.family = AF_UNSPEC;
+
         int opt;
-        while ((opt = getopt(argc, argv, "c:w:i:u:s:t:qh")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qh")) != -1) {
                 switch (opt) {
+                case '4':
+                        config.family = AF_INET;
+                        break;
+                case '6':
+                        config.family = AF_INET6;
+                        break;
                 case 'c':
                         config.count = (uint32_t)atoi(optarg);
                         break;
@@ -81,9 +89,11 @@ ping_cli_main(int argc, char *argv[])
         }
 
         const char *target_ip_str = argv[optind];
-        if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
+        if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
+                              &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
         }
+        config.family = config.target_addr.ss_family;
 
         if (getuid() != 0) {
                 log_warn(

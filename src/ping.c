@@ -4,6 +4,8 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <netdb.h>
+#include <netinet/icmp6.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <poll.h>
@@ -43,22 +45,29 @@ ping_run(const ping_config_t *config)
 {
         signal(SIGINT, handle_sigint);
 
-        net_socket_t *sock = net_open_icmp_socket();
+        net_socket_t *sock = net_open_icmp_socket(config->family);
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
         }
 
         if (config->ttl > 0) {
                 int ttl = config->ttl;
-                setsockopt(net_get_fd(sock), IPPROTO_IP, IP_TTL, &ttl,
-                           sizeof(ttl));
+                int level =
+                    (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
+                int optname =
+                    (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
+                setsockopt(net_get_fd(sock), level, optname, &ttl, sizeof(ttl));
         }
 
-        struct in_addr target_in = {.s_addr = config->target_ip};
-        char target_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &target_in, target_str, sizeof(target_str));
+        char target_str[INET6_ADDRSTRLEN];
+        getnameinfo((struct sockaddr *)&config->target_addr,
+                    config->target_addr_len, target_str, sizeof(target_str),
+                    NULL, 0, NI_NUMERICHOST);
 
-        uint32_t total_len = sizeof(struct icmp) + config->payload_size;
+        size_t header_size = (config->family == AF_INET6)
+                                 ? sizeof(struct icmp6_hdr)
+                                 : sizeof(struct icmp);
+        uint32_t total_len = header_size + config->payload_size;
 
         if (!config->quiet) {
                 printf("PING %s: %u data bytes\n", target_str,
@@ -78,6 +87,11 @@ ping_run(const ping_config_t *config)
 
         uint64_t next_send = get_time_ns();
 
+        int icmp_type_req =
+            (config->family == AF_INET6) ? ICMP6_ECHO_REQUEST : ICMP_ECHO;
+        int icmp_type_rep =
+            (config->family == AF_INET6) ? ICMP6_ECHO_REPLY : ICMP_ECHOREPLY;
+
         while (keep_running) {
                 if (config->count > 0 && sent >= config->count) {
                         break;
@@ -87,27 +101,40 @@ ping_run(const ping_config_t *config)
                 if (!packet)
                         die("Memory allocation failed");
 
-                struct icmp *icp = (struct icmp *)packet;
-                icp->icmp_type = ICMP_ECHO;
-                icp->icmp_code = 0;
-                icp->icmp_id = htons(pid);
-                icp->icmp_seq = htons(seq);
-
-                if (config->payload_size >= 8) {
-                        uint64_t *timestamp =
-                            (uint64_t *)(packet + sizeof(struct icmp));
-                        *timestamp = get_time_ns();
+                if (config->family == AF_INET) {
+                        struct icmp *icp = (struct icmp *)packet;
+                        icp->icmp_type = icmp_type_req;
+                        icp->icmp_code = 0;
+                        icp->icmp_id = htons(pid);
+                        icp->icmp_seq = htons(seq);
+                        if (config->payload_size >= 8) {
+                                uint64_t *timestamp =
+                                    (uint64_t *)(packet + header_size);
+                                *timestamp = get_time_ns();
+                        }
+                        icp->icmp_cksum = icmp_checksum(packet, total_len);
+                } else {
+                        struct icmp6_hdr *icp = (struct icmp6_hdr *)packet;
+                        icp->icmp6_type = icmp_type_req;
+                        icp->icmp6_code = 0;
+                        icp->icmp6_id = htons(pid);
+                        icp->icmp6_seq = htons(seq);
+                        if (config->payload_size >= 8) {
+                                uint64_t *timestamp =
+                                    (uint64_t *)(packet + header_size);
+                                *timestamp = get_time_ns();
+                        }
+                        icp->icmp6_cksum = 0;
                 }
 
-                icp->icmp_cksum = icmp_checksum(packet, total_len);
-
-                if (net_send_icmp_packet(sock, packet, total_len,
-                                         config->target_ip) < 0) {
+                if (net_send_icmp_packet(
+                        sock, packet, total_len,
+                        (struct sockaddr *)&config->target_addr,
+                        config->target_addr_len) < 0) {
                         log_err("Failed to send ICMP packet: %s",
                                 strerror(errno));
-                } else {
-                        sent++;
                 }
+                sent++;
                 free(packet);
 
                 next_send += config->interval_ns;
@@ -128,35 +155,55 @@ ping_run(const ping_config_t *config)
 
                         if (ret > 0 && (pfd.revents & POLLIN)) {
                                 uint8_t recv_buf[4096];
-                                uint32_t src_ip;
+                                struct sockaddr_storage src_addr;
+                                socklen_t src_addr_len = sizeof(src_addr);
                                 ssize_t n = net_recv_icmp_packet(
-                                    sock, recv_buf, sizeof(recv_buf), &src_ip);
+                                    sock, recv_buf, sizeof(recv_buf), &src_addr,
+                                    &src_addr_len);
                                 if (n <= 0)
                                         continue;
 
-                                struct ip *ip_hdr = (struct ip *)recv_buf;
-                                int hlen = ip_hdr->ip_hl << 2;
+                                int hlen = 0;
+                                int ttl = -1;
+                                if (config->family == AF_INET) {
+                                        struct ip *ip_hdr =
+                                            (struct ip *)recv_buf;
+                                        hlen = ip_hdr->ip_hl << 2;
+                                        ttl = ip_hdr->ip_ttl;
+                                }
 
-                                if (n < (ssize_t)(hlen + 8))
+                                if (n < (ssize_t)(hlen + header_size))
                                         continue;
 
-                                struct icmp *r_icp =
-                                    (struct icmp *)(recv_buf + hlen);
-                                if (r_icp->icmp_type == ICMP_ECHOREPLY &&
-                                    r_icp->icmp_id == htons(pid) &&
-                                    r_icp->icmp_seq == htons(seq)) {
+                                uint16_t r_id, r_seq;
+                                int r_type;
+                                if (config->family == AF_INET) {
+                                        struct icmp *r_icp =
+                                            (struct icmp *)(recv_buf + hlen);
+                                        r_type = r_icp->icmp_type;
+                                        r_id = r_icp->icmp_id;
+                                        r_seq = r_icp->icmp_seq;
+                                } else {
+                                        struct icmp6_hdr *r_icp =
+                                            (struct icmp6_hdr *)(recv_buf +
+                                                                 hlen);
+                                        r_type = r_icp->icmp6_type;
+                                        r_id = r_icp->icmp6_id;
+                                        r_seq = r_icp->icmp6_seq;
+                                }
+
+                                if (r_type == icmp_type_rep &&
+                                    r_id == htons(pid) && r_seq == htons(seq)) {
                                         uint64_t recv_time = get_time_ns();
                                         uint64_t rtt = 0;
 
                                         if (config->payload_size >= 8 &&
-                                            n >= (ssize_t)(hlen +
-                                                           sizeof(struct icmp) +
+                                            n >= (ssize_t)(hlen + header_size +
                                                            8)) {
                                                 uint64_t *orig_timestamp =
-                                                    (uint64_t
-                                                         *)(recv_buf + hlen +
-                                                            sizeof(
-                                                                struct icmp));
+                                                    (uint64_t *)(recv_buf +
+                                                                 hlen +
+                                                                 header_size);
                                                 rtt =
                                                     recv_time - *orig_timestamp;
                                         }
@@ -171,11 +218,12 @@ ping_run(const ping_config_t *config)
                                         }
                                         rtt_sum += rtt;
 
-                                        struct in_addr src_in = {.s_addr =
-                                                                     src_ip};
-                                        char src_str[INET_ADDRSTRLEN];
-                                        inet_ntop(AF_INET, &src_in, src_str,
-                                                  sizeof(src_str));
+                                        char src_str[INET6_ADDRSTRLEN];
+                                        getnameinfo(
+                                            (struct sockaddr *)&src_addr,
+                                            src_addr_len, src_str,
+                                            sizeof(src_str), NULL, 0,
+                                            NI_NUMERICHOST);
 
                                         if (!config->quiet) {
                                                 char time_buf[64] = "N/A";
@@ -186,13 +234,23 @@ ping_run(const ping_config_t *config)
                                                             time_buf,
                                                             sizeof(time_buf));
                                                 }
-                                                printf("%zd bytes from %s: "
-                                                       "icmp_seq=%u ttl=%d "
-                                                       "time=%s\n",
-                                                       n - hlen, src_str,
-                                                       ntohs(r_icp->icmp_seq),
-                                                       ip_hdr->ip_ttl,
-                                                       time_buf);
+                                                if (ttl >= 0) {
+                                                        printf(
+                                                            "%zd bytes from "
+                                                            "%s: icmp_seq=%u "
+                                                            "ttl=%d time=%s\n",
+                                                            n - hlen, src_str,
+                                                            ntohs(r_seq), ttl,
+                                                            time_buf);
+                                                } else {
+                                                        printf(
+                                                            "%zd bytes from "
+                                                            "%s: icmp_seq=%u "
+                                                            "time=%s\n",
+                                                            n - hlen, src_str,
+                                                            ntohs(r_seq),
+                                                            time_buf);
+                                                }
                                         }
 
                                         received++;

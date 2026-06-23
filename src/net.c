@@ -188,9 +188,10 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
 }
 
 net_socket_t *
-net_open_icmp_socket(void)
+net_open_icmp_socket(int family)
 {
-        int fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+        int proto = (family == AF_INET6) ? IPPROTO_ICMPV6 : IPPROTO_ICMP;
+        int fd = socket(family, SOCK_RAW, proto);
         if (fd < 0)
                 return NULL;
         net_socket_t *sock = malloc(sizeof(net_socket_t));
@@ -267,28 +268,16 @@ net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 
 ssize_t
 net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
-                     uint32_t dst_ip)
+                     const struct sockaddr *dest, socklen_t dest_len)
 {
-        struct sockaddr_in dest;
-        memset(&dest, 0, sizeof(dest));
-        dest.sin_family = AF_INET;
-        dest.sin_addr.s_addr = dst_ip;
-        return sendto(sock->fd, buf, len, 0, (struct sockaddr *)&dest,
-                      sizeof(dest));
+        return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
 ssize_t
 net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
-                     uint32_t *src_ip)
+                     struct sockaddr_storage *src, socklen_t *src_len)
 {
-        struct sockaddr_in src;
-        socklen_t src_len = sizeof(src);
-        ssize_t n =
-            recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)&src, &src_len);
-        if (n > 0 && src_ip) {
-                *src_ip = src.sin_addr.s_addr;
-        }
-        return n;
+        return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
 int
@@ -298,6 +287,24 @@ net_get_fd(net_socket_t *sock)
 }
 
 #include <netdb.h>
+
+bool
+net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
+                 socklen_t *ss_len)
+{
+        struct addrinfo hints, *res;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = family;
+
+        if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
+                return false;
+        }
+
+        memcpy(ss, res->ai_addr, res->ai_addrlen);
+        *ss_len = res->ai_addrlen;
+        freeaddrinfo(res);
+        return true;
+}
 
 bool
 net_resolve_ipv4(const char *hostname, uint32_t *ip)
