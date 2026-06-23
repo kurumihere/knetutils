@@ -1,32 +1,52 @@
-CC := clang
-CFLAGS := -Wall -Wextra -pedantic -Werror -O2 -std=c11 -D_GNU_SOURCE -I./include
-LDFLAGS := 
+CC ?= cc
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
 
-SRC_DIR := src
-OBJ_DIR := obj
-BIN_DIR := bin
+WARNING_FLAGS = -Wall -Wextra -pedantic -Werror
+STANDARD_FLAGS = -std=c11 -D_GNU_SOURCE
+INCLUDES = -I./include
 
-TARGET := $(BIN_DIR)/knetutils
+ALL_CFLAGS = $(CFLAGS) $(WARNING_FLAGS) $(STANDARD_FLAGS) $(INCLUDES)
 
-SRCS := $(wildcard $(SRC_DIR)/*.c)
-OBJS := $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+SRCS = src/arping.c \
+       src/arping_cli.c \
+       src/main.c \
+       src/net.c \
+       src/ping.c \
+       src/ping_cli.c \
+       src/utils.c
 
-.PHONY: all clean links
+OBJS = $(SRCS:.c=.o)
+
+TARGET = bin/knetutils
 
 all: $(TARGET) links
 
-$(TARGET): $(OBJS) | $(BIN_DIR)
-	$(CC) $(LDFLAGS) $^ -o $@
+$(TARGET): $(OBJS)
+	@mkdir -p bin
+	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $(OBJS)
+
+.c.o:
+	$(CC) $(ALL_CFLAGS) -c $< -o $@
 
 links: $(TARGET)
-	ln -sf knetutils $(BIN_DIR)/arping
-	ln -sf knetutils $(BIN_DIR)/ping
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BIN_DIR) $(OBJ_DIR):
-	mkdir -p $@
+	@mkdir -p bin
+	@ln -sf knetutils bin/arping
+	@ln -sf knetutils bin/ping
 
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	rm -f $(OBJS) $(TARGET) bin/arping bin/ping
+	rm -rf bin/
+
+install: all
+	install -d $(DESTDIR)$(BINDIR)
+	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/knetutils
+	ln -sf knetutils $(DESTDIR)$(BINDIR)/arping
+	ln -sf knetutils $(DESTDIR)$(BINDIR)/ping
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/knetutils
+	rm -f $(DESTDIR)$(BINDIR)/arping
+	rm -f $(DESTDIR)$(BINDIR)/ping
+
+.PHONY: all links clean install uninstall
