@@ -28,7 +28,7 @@ print_usage(const char *prog_name)
         fprintf(stderr,
                 "  -d              Duplicate Address Detection (DAD) mode\n");
         fprintf(stderr, "  -G              Use default gateway as target\n");
-        fprintf(stderr, "  -D              Cisco style output (! for reply, . "
+        fprintf(stderr, "  -C              Cisco style output (! for reply, . "
                         "for timeout)\n");
         fprintf(stderr, "  -f              Quit on first reply\n");
         fprintf(stderr,
@@ -53,7 +53,7 @@ arping_cli_main(int argc, char *argv[])
 
         const char *source_ip_str = NULL;
         int opt;
-        while ((opt = getopt(argc, argv, "I:c:w:i:S:qUdGDfAbu:h")) != -1) {
+        while ((opt = getopt(argc, argv, "I:c:w:i:S:qUdGCfAbu:h")) != -1) {
                 switch (opt) {
                 case 'I':
                         config.iface = optarg;
@@ -83,7 +83,7 @@ arping_cli_main(int argc, char *argv[])
                 case 'G':
                         config.gateway = true;
                         break;
-                case 'D':
+                case 'C':
                         config.cisco_style = true;
                         break;
                 case 'f':
@@ -151,6 +151,10 @@ arping_cli_main(int argc, char *argv[])
                         die("Invalid target IP address or hostname: %s",
                             target_ip_str);
                 }
+        }
+
+        if (config.cisco_style && config.count == 0) {
+                config.count = 5;
         }
 
         if (getuid() != 0) {

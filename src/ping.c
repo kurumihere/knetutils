@@ -71,8 +71,13 @@ ping_run(const ping_config_t *config)
         uint32_t total_len = header_size + config->payload_size;
 
         if (!config->quiet) {
-                printf("PING %s: %u data bytes\n", target_str,
-                       config->payload_size);
+                if (config->cisco_style) {
+                        printf("Sending %u, %u-byte ICMP Echos to %s, timeout is %u seconds:\n",
+                               config->count, config->payload_size, target_str,
+                               (unsigned int)(config->timeout_ns / 1000000000ULL));
+                } else {
+                        printf("PING %s: %u data bytes\n", target_str, config->payload_size);
+                }
         }
 
         uint16_t pid = getpid() & 0xFFFF;
@@ -226,30 +231,21 @@ ping_run(const ping_config_t *config)
                                             NI_NUMERICHOST);
 
                                         if (!config->quiet) {
-                                                char time_buf[64] = "N/A";
-                                                if (config->payload_size >= 8) {
-                                                        format_time(
-                                                            rtt,
-                                                            config->time_unit,
-                                                            time_buf,
-                                                            sizeof(time_buf));
-                                                }
-                                                if (ttl >= 0) {
-                                                        printf(
-                                                            "%zd bytes from "
-                                                            "%s: icmp_seq=%u "
-                                                            "ttl=%d time=%s\n",
-                                                            n - hlen, src_str,
-                                                            ntohs(r_seq), ttl,
-                                                            time_buf);
+                                                if (config->cisco_style) {
+                                                    printf("!");
+                                                    fflush(stdout);
                                                 } else {
-                                                        printf(
-                                                            "%zd bytes from "
-                                                            "%s: icmp_seq=%u "
-                                                            "time=%s\n",
-                                                            n - hlen, src_str,
-                                                            ntohs(r_seq),
-                                                            time_buf);
+                                                    char time_buf[64] = "N/A";
+                                                    if (config->payload_size >= 8) {
+                                                        format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
+                                                    }
+                                                    if (ttl >= 0) {
+                                                        printf("%zd bytes from %s: icmp_seq=%u ttl=%d time=%s\n",
+                                                               n - hlen, src_str, ntohs(r_seq), ttl, time_buf);
+                                                    } else {
+                                                        printf("%zd bytes from %s: icmp_seq=%u time=%s\n",
+                                                               n - hlen, src_str, ntohs(r_seq), time_buf);
+                                                    }
                                                 }
                                         }
 
@@ -264,7 +260,12 @@ ping_run(const ping_config_t *config)
                         break;
 
                 if (!replied && !config->quiet) {
-                        printf("Timeout waiting for reply\n");
+                        if (config->cisco_style) {
+                                printf(".");
+                                fflush(stdout);
+                        } else {
+                                printf("Timeout waiting for reply\n");
+                        }
                 }
 
                 seq++;
@@ -279,21 +280,31 @@ ping_run(const ping_config_t *config)
 
         net_close_raw_socket(sock);
 
-        printf("\n--- %s ping statistics ---\n", target_str);
-        printf(
-            "%u packets transmitted, %u packets received, %d%% packet loss\n",
-            sent, received, sent == 0 ? 0 : ((sent - received) * 100) / sent);
+        if (!config->quiet) {
+                if (config->cisco_style) {
+                        printf("\nSuccess rate is %u percent (%u/%u)",
+                               sent == 0 ? 0 : ((received * 100) / sent), received, sent);
+                        if (received > 0 && config->payload_size >= 8) {
+                                char min_buf[64], avg_buf[64], max_buf[64];
+                                format_time(rtt_min, config->time_unit, min_buf, sizeof(min_buf));
+                                format_time(rtt_sum / received, config->time_unit, avg_buf, sizeof(avg_buf));
+                                format_time(rtt_max, config->time_unit, max_buf, sizeof(max_buf));
+                                printf(", round-trip min/avg/max = %s/%s/%s", min_buf, avg_buf, max_buf);
+                        }
+                        printf("\n");
+                } else {
+                        printf("\n--- %s ping statistics ---\n", target_str);
+                        printf("%u packets transmitted, %u packets received, %d%% packet loss\n",
+                               sent, received, sent == 0 ? 0 : ((sent - received) * 100) / sent);
 
-        if (received > 0 && config->payload_size >= 8) {
-                char min_buf[64], avg_buf[64], max_buf[64];
-                format_time(rtt_min, config->time_unit, min_buf,
-                            sizeof(min_buf));
-                format_time(rtt_sum / received, config->time_unit, avg_buf,
-                            sizeof(avg_buf));
-                format_time(rtt_max, config->time_unit, max_buf,
-                            sizeof(max_buf));
-                printf("rtt min/avg/max = %s/%s/%s\n", min_buf, avg_buf,
-                       max_buf);
+                        if (received > 0 && config->payload_size >= 8) {
+                                char min_buf[64], avg_buf[64], max_buf[64];
+                                format_time(rtt_min, config->time_unit, min_buf, sizeof(min_buf));
+                                format_time(rtt_sum / received, config->time_unit, avg_buf, sizeof(avg_buf));
+                                format_time(rtt_max, config->time_unit, max_buf, sizeof(max_buf));
+                                printf("rtt min/avg/max = %s/%s/%s\n", min_buf, avg_buf, max_buf);
+                        }
+                }
         }
 
         return (received > 0) ? 0 : 1;

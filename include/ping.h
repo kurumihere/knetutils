@@ -16,6 +16,7 @@ typedef struct {
         struct sockaddr_storage target_addr;
         socklen_t target_addr_len;
         int family;
+        bool cisco_style;
 } ping_config_t;
 
 int ping_run(const ping_config_t *config);

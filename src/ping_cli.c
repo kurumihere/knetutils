@@ -24,6 +24,7 @@ print_usage(const char *prog_name)
                         "Default: auto-scaling\n");
         fprintf(stderr, "  -s <size>       Payload size in bytes\n");
         fprintf(stderr, "  -t <ttl>        Time to live (TTL)\n");
+        fprintf(stderr, "  -C              Cisco-style output\n");
         fprintf(stderr, "  -q              Quiet output\n");
         fprintf(stderr, "  -h              Print this help\n");
 }
@@ -43,13 +44,16 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qh")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qCh")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
                         break;
                 case '6':
                         config.family = AF_INET6;
+                        break;
+                case 'C':
+                        config.cisco_style = true;
                         break;
                 case 'c':
                         config.count = (uint32_t)atoi(optarg);
@@ -94,6 +98,10 @@ ping_cli_main(int argc, char *argv[])
                 die("Invalid target IP address or hostname: %s", target_ip_str);
         }
         config.family = config.target_addr.ss_family;
+
+        if (config.cisco_style && config.count == 0) {
+                config.count = 5;
+        }
 
         if (getuid() != 0) {
                 log_warn(
