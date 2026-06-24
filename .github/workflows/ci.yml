@@ -17,13 +17,13 @@ jobs:
     - uses: actions/checkout@v7
     
     - name: Compile
-      run: make
+      run: make clean && make
       
     - name: Run clang-format check
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get install -y clang-format
-        clang-format --dry-run --Werror src/*.c include/*.h
+        clang-format --dry-run --Werror src/core/*.c src/tools/*/*.c include/*.h
 
     - name: Test CLI Interfaces
       run: |
