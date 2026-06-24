@@ -168,187 +168,127 @@ ping_run(const ping_config_t *config)
                                 break;
                         }
 
-                        if (ret > 0 && (pfd.revents & POLLIN)) {
-                                uint8_t recv_buf[4096];
-                                struct sockaddr_storage src_addr;
-                                socklen_t src_addr_len = sizeof(src_addr);
-                                ssize_t n = net_recv_icmp_packet(
-                                    sock, recv_buf, sizeof(recv_buf), &src_addr,
-                                    &src_addr_len);
-                                if (n <= 0)
-                                        continue;
+                        if (ret <= 0 || !(pfd.revents & POLLIN))
+                                continue;
 
-                                int hlen = 0;
-                                int ttl = -1;
-                                if (config->family == AF_INET && !is_dgram) {
-                                        struct ip *ip_hdr =
-                                            (struct ip *)recv_buf;
-                                        hlen = ip_hdr->ip_hl << 2;
-                                        ttl = ip_hdr->ip_ttl;
+                        uint8_t recv_buf[4096];
+                        struct sockaddr_storage src_addr;
+                        socklen_t src_addr_len = sizeof(src_addr);
+                        ssize_t n = net_recv_icmp_packet(
+                            sock, recv_buf, sizeof(recv_buf), &src_addr,
+                            &src_addr_len);
+                        if (n <= 0)
+                                continue;
+
+                        int hlen = 0;
+                        int ttl = -1;
+                        if (config->family == AF_INET && !is_dgram) {
+                                struct ip *ip_hdr = (struct ip *)recv_buf;
+                                hlen = ip_hdr->ip_hl << 2;
+                                ttl = ip_hdr->ip_ttl;
+                        }
+
+                        if (n < (ssize_t)(hlen + header_size))
+                                continue;
+
+                        uint16_t r_id, r_seq;
+                        int r_type;
+                        if (config->family == AF_INET) {
+                                struct icmp *r_icp =
+                                    (struct icmp *)(recv_buf + hlen);
+                                r_type = r_icp->icmp_type;
+                                r_id = r_icp->icmp_id;
+                                r_seq = r_icp->icmp_seq;
+                        } else {
+                                struct icmp6_hdr *r_icp =
+                                    (struct icmp6_hdr *)(recv_buf + hlen);
+                                r_type = r_icp->icmp6_type;
+                                r_id = r_icp->icmp6_id;
+                                r_seq = r_icp->icmp6_seq;
+                        }
+
+                        if (r_type != icmp_type_rep ||
+                            (!is_dgram && r_id != htons(pid))) {
+                                continue;
+                        }
+
+                        if (config->flood) {
+                                uint64_t recv_time = get_time_ns();
+                                uint64_t rtt =
+                                    time_diff_ns(send_time, recv_time);
+
+                                if (rtt_min == 0 || rtt < rtt_min)
+                                        rtt_min = rtt;
+                                if (rtt > rtt_max)
+                                        rtt_max = rtt;
+                                rtt_sum += rtt;
+
+                                received++;
+                                got_reply = true;
+                                replied = true;
+                                printf("\b \b");
+                                fflush(stdout);
+
+                                if (config->count > 0 &&
+                                    received >= config->count) {
+                                        keep_running = false;
                                 }
+                                break;
+                        }
 
-                                if (n < (ssize_t)(hlen + header_size))
-                                        continue;
+                        if (r_seq != htons(seq)) {
+                                continue;
+                        }
 
-                                uint16_t r_id, r_seq;
-                                int r_type;
-                                if (config->family == AF_INET) {
-                                        struct icmp *r_icp =
-                                            (struct icmp *)(recv_buf + hlen);
-                                        r_type = r_icp->icmp_type;
-                                        r_id = r_icp->icmp_id;
-                                        r_seq = r_icp->icmp_seq;
+                        uint64_t recv_time = get_time_ns();
+                        uint64_t rtt = 0;
+
+                        if (recv_time >= send_time) {
+                                rtt = time_diff_ns(send_time, recv_time);
+                        }
+
+                        if (rtt_min == 0 || rtt < rtt_min)
+                                rtt_min = rtt;
+                        if (rtt > rtt_max)
+                                rtt_max = rtt;
+                        rtt_sum += rtt;
+
+                        char src_str[INET6_ADDRSTRLEN];
+                        getnameinfo((struct sockaddr *)&src_addr, src_addr_len,
+                                    src_str, sizeof(src_str), NULL, 0,
+                                    NI_NUMERICHOST);
+
+                        if (!config->quiet) {
+                                if (config->cisco_style) {
+                                        printf("!");
+                                        fflush(stdout);
                                 } else {
-                                        struct icmp6_hdr *r_icp =
-                                            (struct icmp6_hdr *)(recv_buf +
-                                                                 hlen);
-                                        r_type = r_icp->icmp6_type;
-                                        r_id = r_icp->icmp6_id;
-                                        r_seq = r_icp->icmp6_seq;
-                                }
-
-                                if (r_type == icmp_type_rep &&
-                                    (is_dgram || r_id == htons(pid))) {
-                                        if (config->flood) {
-                                                uint64_t recv_time =
-                                                    get_time_ns();
-                                                uint64_t rtt = time_diff_ns(
-                                                    send_time, recv_time);
-
-                                                if (rtt_min == 0 ||
-                                                    rtt < rtt_min)
-                                                        rtt_min = rtt;
-                                                if (rtt > rtt_max)
-                                                        rtt_max = rtt;
-                                                rtt_sum += rtt;
-
-                                                received++;
-                                                got_reply = true;
-                                                replied = true;
-                                                printf("\b \b");
-                                                fflush(stdout);
-
-                                                if (config->count > 0 &&
-                                                    received >= config->count) {
-                                                        keep_running = false;
-                                                }
-                                                break;
-                                        } else if (r_seq == htons(seq)) {
-                                                uint64_t recv_time =
-                                                    get_time_ns();
-                                                uint64_t rtt = 0;
-
-                                                if (recv_time >= send_time) {
-                                                        rtt = time_diff_ns(
-                                                            send_time,
-                                                            recv_time);
-                                                }
-
-                                                if (rtt_min == 0 ||
-                                                    rtt < rtt_min)
-                                                        rtt_min = rtt;
-                                                if (rtt > rtt_max)
-                                                        rtt_max = rtt;
-                                                rtt_sum += rtt;
-
-                                                char src_str[INET6_ADDRSTRLEN];
-                                                getnameinfo(
-                                                    (struct sockaddr
-                                                         *)&src_addr,
-                                                    src_addr_len, src_str,
-                                                    sizeof(src_str), NULL, 0,
-                                                    NI_NUMERICHOST);
-
-                                                if (!config->quiet) {
-                                                        if (config
-                                                                ->cisco_style) {
-                                                                printf("!");
-                                                                fflush(stdout);
-                                                        } else {
-                                                                char time_buf
-                                                                    [64] =
-                                                                        "N/A";
-                                                                if (config
-                                                                        ->payload_size >=
-                                                                    8) {
-                                                                        format_time(
-                                                                            rtt,
-                                                                            config
-                                                                                ->time_unit,
-                                                                            time_buf,
-                                                                            sizeof(
-                                                                                time_buf));
-                                                                }
-                                                                if (ttl >= 0) {
-                                                                        printf(
-                                                                            "%z"
-                                                                            "d "
-                                                                            "by"
-                                                                            "te"
-                                                                            "s "
-                                                                            "fr"
-                                                                            "om"
-                                                                            " %"
-                                                                            "s:"
-                                                                            " i"
-                                                                            "cm"
-                                                                            "p_"
-                                                                            "se"
-                                                                            "q="
-                                                                            "%u"
-                                                                            " t"
-                                                                            "tl"
-                                                                            "=%"
-                                                                            "d "
-                                                                            "ti"
-                                                                            "me"
-                                                                            "=%"
-                                                                            "s"
-                                                                            "\n",
-                                                                            n - hlen,
-                                                                            src_str,
-                                                                            ntohs(
-                                                                                r_seq),
-                                                                            ttl,
-                                                                            time_buf);
-                                                                } else {
-                                                                        printf(
-                                                                            "%z"
-                                                                            "d "
-                                                                            "by"
-                                                                            "te"
-                                                                            "s "
-                                                                            "fr"
-                                                                            "om"
-                                                                            " %"
-                                                                            "s:"
-                                                                            " i"
-                                                                            "cm"
-                                                                            "p_"
-                                                                            "se"
-                                                                            "q="
-                                                                            "%u"
-                                                                            " t"
-                                                                            "im"
-                                                                            "e="
-                                                                            "%s"
-                                                                            "\n",
-                                                                            n - hlen,
-                                                                            src_str,
-                                                                            ntohs(
-                                                                                r_seq),
-                                                                            time_buf);
-                                                                }
-                                                        }
-                                                }
-
-                                                received++;
-                                                got_reply = true;
-                                                replied = true;
-                                                break;
+                                        char time_buf[64] = "N/A";
+                                        if (config->payload_size >= 8) {
+                                                format_time(
+                                                    rtt, config->time_unit,
+                                                    time_buf, sizeof(time_buf));
+                                        }
+                                        if (ttl >= 0) {
+                                                printf("%zd bytes from %s: "
+                                                       "icmp_seq=%u ttl=%d "
+                                                       "time=%s\n",
+                                                       n - hlen, src_str,
+                                                       ntohs(r_seq), ttl,
+                                                       time_buf);
+                                        } else {
+                                                printf("%zd bytes from %s: "
+                                                       "icmp_seq=%u time=%s\n",
+                                                       n - hlen, src_str,
+                                                       ntohs(r_seq), time_buf);
                                         }
                                 }
                         }
+
+                        received++;
+                        got_reply = true;
+                        replied = true;
+                        break;
                 }
 
                 if (!keep_running)
