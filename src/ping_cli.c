@@ -24,7 +24,9 @@ print_usage(const char *prog_name)
                         "default: auto-scaling\n");
         fprintf(stderr, "  -s <size>       payload size in bytes\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
-        fprintf(stderr, "  -f              flood ping (prints . for send, \\b for recv)\n");
+        fprintf(
+            stderr,
+            "  -f              flood ping (prints . for send, \\b for recv)\n");
         fprintf(stderr, "  -C              cisco-style output\n");
         fprintf(stderr, "  -q              quiet output\n");
         fprintf(stderr, "  -h              print help and exit\n");

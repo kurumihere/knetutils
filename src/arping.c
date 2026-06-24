@@ -58,14 +58,19 @@ arping_run(const arping_config_t *config)
         if (!config->quiet) {
                 if (config->cisco_style) {
                         char tgt_str[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET, &target_in, tgt_str, sizeof(tgt_str));
-                        printf("Sending %u, 28-byte ARP Requests to %s, timeout is %u seconds:\n",
-                               config->count, tgt_str,
-                               (unsigned int)(config->timeout_ns / 1000000000ULL));
+                        inet_ntop(AF_INET, &target_in, tgt_str,
+                                  sizeof(tgt_str));
+                        printf(
+                            "Sending %u, 28-byte ARP Requests to %s, timeout "
+                            "is %u seconds:\n",
+                            config->count, tgt_str,
+                            (unsigned int)(config->timeout_ns / 1000000000ULL));
                 } else {
                         char tgt_str[INET_ADDRSTRLEN], src_str[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET, &target_in, tgt_str, sizeof(tgt_str));
-                        inet_ntop(AF_INET, &source_in, src_str, sizeof(src_str));
+                        inet_ntop(AF_INET, &target_in, tgt_str,
+                                  sizeof(tgt_str));
+                        inet_ntop(AF_INET, &source_in, src_str,
+                                  sizeof(src_str));
                         printf("ARPING %s from %s %s\n", tgt_str, src_str,
                                config->iface);
                 }
@@ -233,14 +238,16 @@ arping_run(const arping_config_t *config)
         if (!config->quiet) {
                 if (config->cisco_style) {
                         printf("\nSuccess rate is %u percent (%u/%u)\n",
-                               sent == 0 ? 0 : ((received * 100) / sent), received, sent);
+                               sent == 0 ? 0 : ((received * 100) / sent),
+                               received, sent);
                 } else {
                         printf("\n--- %s arping statistics ---\n",
                                inet_ntoa(target_in));
-                        printf("%u packets transmitted, %u packets received, %u%% "
-                               "packet loss\n",
-                               sent, received,
-                               sent == 0 ? 0 : ((sent - received) * 100 / sent));
+                        printf(
+                            "%u packets transmitted, %u packets received, %u%% "
+                            "packet loss\n",
+                            sent, received,
+                            sent == 0 ? 0 : ((sent - received) * 100 / sent));
                 }
         }
 
