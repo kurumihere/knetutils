@@ -213,6 +213,7 @@ ping_run(const ping_config_t *config)
                                     (uint64_t *)(packet + header_size);
                                 *timestamp = get_time_ns();
                         }
+                        icp->icmp_cksum = 0;
                         icp->icmp_cksum = icmp_checksum(packet, total_len);
                 } else {
                         struct icmp6_hdr *icp = (struct icmp6_hdr *)packet;
