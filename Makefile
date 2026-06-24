@@ -54,4 +54,11 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/ping
 	rm -f $(DESTDIR)$(BINDIR)/traceroute
 
-.PHONY: all links clean install uninstall
+analyze: clean
+	scan-build $(MAKE) all
+
+format:
+	clang-format -i $(SRCS) include/*.h
+
+.PHONY: all links clean install uninstall analyze format
+
