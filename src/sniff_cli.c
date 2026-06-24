@@ -15,8 +15,16 @@ print_usage(const char *prog_name)
         fprintf(stderr, "  -I <iface>      interface to sniff on (required)\n");
         fprintf(stderr,
                 "  -c <count>      stop after receiving count packets\n");
-        fprintf(stderr, "  -v              increase verbosity (can be used "
-                        "multiple times)\n");
+        fprintf(
+            stderr,
+            "  -v              increase verbosity (max level: 3, e.g. -vvv)\n");
+        fprintf(stderr,
+                "                    -v   : show L4 headers (TCP/UDP/ICMP)\n");
+        fprintf(
+            stderr,
+            "                    -vv  : show L4 headers + payload hex-dump\n");
+        fprintf(stderr, "                    -vvv : show L4 headers + full "
+                        "packet hex-dump\n");
         fprintf(stderr, "  -h              print help and exit\n");
 }
 
