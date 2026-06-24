@@ -20,6 +20,7 @@ print_usage(const char *prog_name)
         fprintf(stderr,
                 "  -m <max_ttl>    set the max number of hops (max TTL)\n");
         fprintf(stderr, "  -q <nqueries>   set the number of probes per hop\n");
+        fprintf(stderr, "  -U              use UDP instead of ICMP ECHO\n");
         fprintf(stderr,
                 "  -w <timeout>    wait time for a response, in seconds\n");
         fprintf(stderr, "  -I <iface/ip>   bind to a specific interface or IP "
@@ -44,7 +45,7 @@ traceroute_cli_main(int argc, char *argv[])
         config.resolve_hostnames = true;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46f:m:q:w:I:nh")) != -1) {
+        while ((opt = getopt(argc, argv, "46f:m:q:w:I:nUh")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -70,6 +71,9 @@ traceroute_cli_main(int argc, char *argv[])
                         break;
                 case 'n':
                         config.resolve_hostnames = false;
+                        break;
+                case 'U':
+                        config.use_udp = true;
                         break;
                 case 'h':
                         print_usage(argv[0]);

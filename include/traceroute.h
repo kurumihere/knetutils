@@ -15,6 +15,7 @@ typedef struct {
         int family;
         const char *bind_iface;
         bool resolve_hostnames;
+        bool use_udp;
 } traceroute_config_t;
 
 int traceroute_run(const traceroute_config_t *config);

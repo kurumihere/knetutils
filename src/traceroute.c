@@ -9,6 +9,7 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/udp.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -16,18 +17,18 @@
 #include <string.h>
 #include <unistd.h>
 
-static volatile bool keep_running = true;
+static volatile sig_atomic_t keep_running = 1;
 
 static void
 handle_sigint(int sig)
 {
         (void)sig;
-        keep_running = false;
+        keep_running = 0;
 }
 
 static bool
 is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
-                uint16_t expected_seq)
+                uint16_t expected_seq, bool use_udp, uint16_t expected_port)
 {
         if (len < (ssize_t)sizeof(struct ip))
                 return false;
@@ -40,7 +41,7 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 
         struct icmp *icp = (struct icmp *)(buf + hlen);
 
-        if (icp->icmp_type == ICMP_ECHOREPLY) {
+        if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
                 return icp->icmp_id == expected_id &&
                        icp->icmp_seq == expected_seq;
         }
@@ -52,13 +53,20 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                 struct ip *inner_ip = (struct ip *)icp->icmp_data;
                 int inner_hlen = inner_ip->ip_hl << 2;
 
-                if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
-                        return false;
-
-                struct icmp *inner_icp =
-                    (struct icmp *)((uint8_t *)inner_ip + inner_hlen);
-                return inner_icp->icmp_id == expected_id &&
-                       inner_icp->icmp_seq == expected_seq;
+                if (use_udp) {
+                        if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
+                                return false;
+                        struct udphdr *inner_udp =
+                            (struct udphdr *)((uint8_t *)inner_ip + inner_hlen);
+                        return ntohs(inner_udp->uh_dport) == expected_port;
+                } else {
+                        if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
+                                return false;
+                        struct icmp *inner_icp =
+                            (struct icmp *)((uint8_t *)inner_ip + inner_hlen);
+                        return inner_icp->icmp_id == expected_id &&
+                               inner_icp->icmp_seq == expected_seq;
+                }
         }
 
         return false;
@@ -66,14 +74,14 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 
 static bool
 is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
-                uint16_t expected_seq)
+                uint16_t expected_seq, bool use_udp, uint16_t expected_port)
 {
         if (len < (ssize_t)sizeof(struct icmp6_hdr))
                 return false;
 
         struct icmp6_hdr *icp = (struct icmp6_hdr *)buf;
 
-        if (icp->icmp6_type == ICMP6_ECHO_REPLY) {
+        if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
                 return icp->icmp6_id == expected_id &&
                        icp->icmp6_seq == expected_seq;
         }
@@ -85,12 +93,20 @@ is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                         return false;
 
                 struct ip6_hdr *inner_ip = (struct ip6_hdr *)(icp + 1);
-                struct icmp6_hdr *inner_icp =
-                    (struct icmp6_hdr *)((uint8_t *)inner_ip +
-                                         sizeof(struct ip6_hdr));
 
-                return inner_icp->icmp6_id == expected_id &&
-                       inner_icp->icmp6_seq == expected_seq;
+                if (use_udp) {
+                        struct udphdr *inner_udp =
+                            (struct udphdr *)((uint8_t *)inner_ip +
+                                              sizeof(struct ip6_hdr));
+                        return ntohs(inner_udp->uh_dport) == expected_port;
+                } else {
+                        struct icmp6_hdr *inner_icp =
+                            (struct icmp6_hdr *)((uint8_t *)inner_ip +
+                                                 sizeof(struct ip6_hdr));
+
+                        return inner_icp->icmp6_id == expected_id &&
+                               inner_icp->icmp6_seq == expected_seq;
+                }
         }
 
         return false;
@@ -109,6 +125,14 @@ traceroute_run(const traceroute_config_t *config)
         net_socket_t *sock = net_open_icmp_socket(config->family);
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
+        }
+
+        int udp_sock = -1;
+        if (config->use_udp) {
+                udp_sock = socket(config->family, SOCK_DGRAM, IPPROTO_UDP);
+                if (udp_sock < 0) {
+                        die("Failed to open UDP socket");
+                }
         }
 
         if (config->bind_iface) {
@@ -196,35 +220,70 @@ traceroute_run(const traceroute_config_t *config)
                 for (uint8_t probe = 0; probe < config->queries && keep_running;
                      probe++) {
 
-                        if (config->family == AF_INET) {
-                                struct icmp *icp = (struct icmp *)packet;
-                                icp->icmp_type = ICMP_ECHO;
-                                icp->icmp_code = 0;
-                                icp->icmp_id = htons(pid);
-                                icp->icmp_seq = htons(seq);
-                                icp->icmp_cksum = 0;
-                                icp->icmp_cksum =
-                                    net_checksum(packet, header_size);
-                        } else {
-                                struct icmp6_hdr *icp =
-                                    (struct icmp6_hdr *)packet;
-                                icp->icmp6_type = ICMP6_ECHO_REQUEST;
-                                icp->icmp6_code = 0;
-                                icp->icmp6_id = htons(pid);
-                                icp->icmp6_seq = htons(seq);
-                                icp->icmp6_cksum = 0;
-                        }
+                        uint16_t dest_port =
+                            33434 + (ttl - 1) * config->queries + probe;
 
                         uint64_t send_time = get_time_ns();
 
-                        if (net_send_icmp_packet(
-                                sock, packet, header_size,
-                                (struct sockaddr *)&config->target_addr,
-                                config->target_addr_len) < 0) {
-                                printf("* ");
-                                fflush(stdout);
-                                seq++;
-                                continue;
+                        if (config->use_udp) {
+                                struct sockaddr_storage target =
+                                    config->target_addr;
+                                if (config->family == AF_INET) {
+                                        ((struct sockaddr_in *)&target)
+                                            ->sin_port = htons(dest_port);
+                                } else {
+                                        ((struct sockaddr_in6 *)&target)
+                                            ->sin6_port = htons(dest_port);
+                                }
+                                int level = (config->family == AF_INET6)
+                                                ? IPPROTO_IPV6
+                                                : IPPROTO_IP;
+                                int optname = (config->family == AF_INET6)
+                                                  ? IPV6_UNICAST_HOPS
+                                                  : IP_TTL;
+                                int ttl_val = ttl;
+                                setsockopt(udp_sock, level, optname, &ttl_val,
+                                           sizeof(ttl_val));
+
+                                char dummy[1] = {0};
+                                if (sendto(udp_sock, dummy, 0, 0,
+                                           (struct sockaddr *)&target,
+                                           config->target_addr_len) < 0) {
+                                        printf("* ");
+                                        fflush(stdout);
+                                        seq++;
+                                        continue;
+                                }
+                        } else {
+                                if (config->family == AF_INET) {
+                                        struct icmp *icp =
+                                            (struct icmp *)packet;
+                                        icp->icmp_type = ICMP_ECHO;
+                                        icp->icmp_code = 0;
+                                        icp->icmp_id = htons(pid);
+                                        icp->icmp_seq = htons(seq);
+                                        icp->icmp_cksum = 0;
+                                        icp->icmp_cksum =
+                                            net_checksum(packet, header_size);
+                                } else {
+                                        struct icmp6_hdr *icp =
+                                            (struct icmp6_hdr *)packet;
+                                        icp->icmp6_type = ICMP6_ECHO_REQUEST;
+                                        icp->icmp6_code = 0;
+                                        icp->icmp6_id = htons(pid);
+                                        icp->icmp6_seq = htons(seq);
+                                        icp->icmp6_cksum = 0;
+                                }
+
+                                if (net_send_icmp_packet(
+                                        sock, packet, header_size,
+                                        (struct sockaddr *)&config->target_addr,
+                                        config->target_addr_len) < 0) {
+                                        printf("* ");
+                                        fflush(stdout);
+                                        seq++;
+                                        continue;
+                                }
                         }
 
                         uint64_t wait_until = send_time + config->timeout_ns;
@@ -255,9 +314,12 @@ traceroute_run(const traceroute_config_t *config)
                                 bool is_target = false;
 
                                 if (config->family == AF_INET) {
-                                        is_mine = is_our_probe_v4(recv_buf, n,
-                                                                  htons(pid),
-                                                                  htons(seq));
+                                        if (is_our_probe_v4(
+                                                recv_buf, n, htons(pid),
+                                                htons(seq), config->use_udp,
+                                                dest_port)) {
+                                                is_mine = true;
+                                        }
 
                                         struct ip *ip_hdr =
                                             (struct ip *)recv_buf;
@@ -270,14 +332,20 @@ traceroute_run(const traceroute_config_t *config)
                                                     (struct icmp *)(recv_buf +
                                                                     hlen);
                                                 if (icp->icmp_type ==
-                                                    ICMP_ECHOREPLY) {
+                                                        ICMP_ECHOREPLY ||
+                                                    (config->use_udp &&
+                                                     icp->icmp_type ==
+                                                         ICMP_UNREACH)) {
                                                         is_target = true;
                                                 }
                                         }
                                 } else {
-                                        is_mine = is_our_probe_v6(recv_buf, n,
-                                                                  htons(pid),
-                                                                  htons(seq));
+                                        if (is_our_probe_v6(
+                                                recv_buf, n, htons(pid),
+                                                htons(seq), config->use_udp,
+                                                dest_port)) {
+                                                is_mine = true;
+                                        }
                                         if (is_mine &&
                                             n >= (ssize_t)sizeof(
                                                      struct icmp6_hdr)) {
@@ -285,7 +353,10 @@ traceroute_run(const traceroute_config_t *config)
                                                     (struct icmp6_hdr *)
                                                         recv_buf;
                                                 if (icp->icmp6_type ==
-                                                    ICMP6_ECHO_REPLY) {
+                                                        ICMP6_ECHO_REPLY ||
+                                                    (config->use_udp &&
+                                                     icp->icmp6_type ==
+                                                         ICMP6_DST_UNREACH)) {
                                                         is_target = true;
                                                 }
                                         }
@@ -349,6 +420,9 @@ traceroute_run(const traceroute_config_t *config)
         }
 
         free(packet);
+        if (udp_sock >= 0) {
+                close(udp_sock);
+        }
         net_close_raw_socket(sock);
-        return 0;
+        return EXIT_SUCCESS;
 }
