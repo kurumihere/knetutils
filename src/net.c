@@ -424,3 +424,60 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
         return false;
 #endif
 }
+
+net_socket_t *
+net_open_ip_raw_socket(int family, int protocol)
+{
+        int fd = socket(family, SOCK_RAW, protocol);
+        if (fd < 0) {
+                return NULL;
+        }
+        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        if (!sock) {
+                close(fd);
+                return NULL;
+        }
+        sock->fd = fd;
+        sock->is_dgram = false;
+#ifndef __linux__
+        sock->bpf_buf = NULL;
+        sock->bpf_buf_len = 0;
+#endif
+        return sock;
+}
+
+ssize_t
+net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
+                const struct sockaddr *dest, socklen_t dest_len)
+{
+        return sendto(sock->fd, buf, len, 0, dest, dest_len);
+}
+
+ssize_t
+net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
+                struct sockaddr_storage *src, socklen_t *src_len)
+{
+        return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
+}
+
+bool
+
+net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
+                      struct sockaddr_storage *src, socklen_t *src_len)
+{
+        int sock = socket(dst->ss_family, SOCK_DGRAM, 0);
+        if (sock < 0)
+                return false;
+
+        if (connect(sock, (const struct sockaddr *)dst, dst_len) < 0) {
+                close(sock);
+                return false;
+        }
+
+        if (getsockname(sock, (struct sockaddr *)src, src_len) < 0) {
+                close(sock);
+                return false;
+        }
+        close(sock);
+        return true;
+}

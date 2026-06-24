@@ -35,4 +35,14 @@ ssize_t net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
 ssize_t net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
                              struct sockaddr_storage *src, socklen_t *src_len);
 
+ssize_t net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
+                        const struct sockaddr *dest, socklen_t dest_len);
+ssize_t net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
+                        struct sockaddr_storage *src, socklen_t *src_len);
+
+net_socket_t *net_open_ip_raw_socket(int family, int protocol);
+bool
+net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
+                      struct sockaddr_storage *src, socklen_t *src_len);
+
 #endif
