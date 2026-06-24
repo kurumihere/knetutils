@@ -14,6 +14,8 @@ SRCS = src/arping.c \
        src/net.c \
        src/ping.c \
        src/ping_cli.c \
+       src/sniff.c \
+       src/sniff_cli.c \
        src/tcping.c \
        src/tcping_cli.c \
        src/traceroute.c \
@@ -37,11 +39,12 @@ links: $(TARGET)
 	@mkdir -p bin
 	@ln -sf knetutils bin/arping
 	@ln -sf knetutils bin/ping
+	@ln -sf knetutils bin/sniff
 	@ln -sf knetutils bin/tcping
 	@ln -sf knetutils bin/traceroute
 
 clean:
-	rm -f $(OBJS) $(TARGET) bin/arping bin/ping bin/tcping bin/traceroute
+	rm -f $(OBJS) $(TARGET) bin/arping bin/ping bin/sniff bin/tcping bin/traceroute
 	rm -rf bin/
 
 install: all
@@ -49,6 +52,7 @@ install: all
 	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/knetutils
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/arping
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/ping
+	ln -sf knetutils $(DESTDIR)$(BINDIR)/sniff
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/tcping
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/traceroute
 
@@ -56,6 +60,7 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/knetutils
 	rm -f $(DESTDIR)$(BINDIR)/arping
 	rm -f $(DESTDIR)$(BINDIR)/ping
+	rm -f $(DESTDIR)$(BINDIR)/sniff
 	rm -f $(DESTDIR)$(BINDIR)/tcping
 	rm -f $(DESTDIR)$(BINDIR)/traceroute
 
