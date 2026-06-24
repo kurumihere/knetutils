@@ -47,6 +47,13 @@ arping_run(const arping_config_t *config)
                 return -1;
         }
 
+        if (config->dad) {
+                if (!net_set_promiscuous(sock)) {
+                        log_warn("Failed to set promiscuous mode for DAD. "
+                                 "Detection might be incomplete.");
+                }
+        }
+
         if (setgid(getgid()) != 0) {
                 log_warn("Failed to drop group privileges");
         }

@@ -14,6 +14,7 @@ int net_get_iface_index(const char *iface);
 
 net_socket_t *net_open_raw_socket(const char *iface, uint16_t protocol);
 void net_close_raw_socket(net_socket_t *sock);
+bool net_set_promiscuous(net_socket_t *sock);
 
 ssize_t net_send_packet(net_socket_t *sock, const void *buf, size_t len,
                         const uint8_t *dst_mac);

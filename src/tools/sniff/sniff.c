@@ -79,6 +79,11 @@ sniff_run(const sniff_config_t *config)
                 die("Failed to open raw socket. Are you root?");
         }
 
+        if (!net_set_promiscuous(sock)) {
+                log_warn("Failed to set promiscuous mode. Sniffing might be "
+                         "limited.");
+        }
+
         if (setuid(getuid()) != 0) {
                 log_warn("Failed to drop user privileges");
         }

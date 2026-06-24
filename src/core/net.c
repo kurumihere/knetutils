@@ -237,6 +237,27 @@ net_close_raw_socket(net_socket_t *sock)
         free(sock);
 }
 
+bool
+net_set_promiscuous(net_socket_t *sock)
+{
+#ifdef __linux__
+        struct packet_mreq mr;
+        memset(&mr, 0, sizeof(mr));
+        mr.mr_ifindex = sock->ifindex;
+        mr.mr_type = PACKET_MR_PROMISC;
+        if (setsockopt(sock->fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr,
+                       sizeof(mr)) < 0) {
+                return false;
+        }
+        return true;
+#else
+        if (ioctl(sock->fd, BIOCPROMISC, NULL) < 0) {
+                return false;
+        }
+        return true;
+#endif
+}
+
 ssize_t
 net_send_packet(net_socket_t *sock, const void *buf, size_t len,
                 const uint8_t *dst_mac)
