@@ -17,7 +17,7 @@
 void log_err(const char *fmt, ...);
 void log_warn(const char *fmt, ...);
 void log_info(const char *fmt, ...);
-void die(const char *fmt, ...);
+void die(const char *fmt, ...) __attribute__((noreturn));
 
 uint64_t get_time_ns(void);
 uint64_t time_diff_ns(uint64_t start, uint64_t end);
