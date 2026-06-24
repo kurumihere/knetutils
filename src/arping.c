@@ -58,6 +58,8 @@ arping_run(const arping_config_t *config)
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGQUIT, &sa, NULL);
 
         struct in_addr target_in = {.s_addr = config->target_ip};
         struct in_addr source_in = {.s_addr = config->source_ip};

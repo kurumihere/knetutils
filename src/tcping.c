@@ -53,7 +53,12 @@ struct ipv6_pseudo_header {
 int
 tcping_run(const tcping_config_t *config)
 {
-        signal(SIGINT, handle_sigint);
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigaction(SIGINT, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGQUIT, &sa, NULL);
 
         net_socket_t *sock =
             net_open_ip_raw_socket(config->family, IPPROTO_TCP);
@@ -145,7 +150,8 @@ tcping_run(const tcping_config_t *config)
                 tcph.th_sum = 0;
                 tcph.th_urp = 0;
 
-                uint8_t csum_buf[1024];
+                uint64_t csum_buf_aligned[128];
+                uint8_t *csum_buf = (uint8_t *)csum_buf_aligned;
                 size_t csum_len = 0;
 
                 if (config->family == AF_INET) {

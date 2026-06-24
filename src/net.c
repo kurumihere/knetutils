@@ -461,7 +461,6 @@ net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
 }
 
 bool
-
 net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
                       struct sockaddr_storage *src, socklen_t *src_len)
 {

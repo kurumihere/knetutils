@@ -39,7 +39,7 @@ traceroute_cli_main(int argc, char *argv[])
         config.first_ttl = 1;
         config.max_ttl = 30;
         config.queries = 3;
-        config.timeout_ns = 3000000000ULL; /* 3 seconds */
+        config.timeout_ns = 3000000000ULL;
         config.family = AF_UNSPEC;
         config.resolve_hostnames = true;
 

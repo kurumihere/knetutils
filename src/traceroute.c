@@ -99,7 +99,12 @@ is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 int
 traceroute_run(const traceroute_config_t *config)
 {
-        signal(SIGINT, handle_sigint);
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigaction(SIGINT, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGQUIT, &sa, NULL);
 
         net_socket_t *sock = net_open_icmp_socket(config->family);
         if (!sock) {

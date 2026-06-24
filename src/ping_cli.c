@@ -80,7 +80,7 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'f':
                         config.flood = true;
-                        config.interval_ns = 10000000ULL; /* 10 ms */
+                        config.interval_ns = 10000000ULL;
                         break;
                 case 'I':
                         config.bind_iface = optarg;

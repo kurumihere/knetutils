@@ -48,7 +48,12 @@ handle_sigint(int sig)
 int
 ping_run(const ping_config_t *config)
 {
-        signal(SIGINT, handle_sigint);
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigaction(SIGINT, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGQUIT, &sa, NULL);
 
         net_socket_t *sock = net_open_icmp_socket(config->family);
         if (!sock) {
@@ -424,7 +429,6 @@ ping_run(const ping_config_t *config)
                         }
 
                         if (config->flood && got_reply) {
-                                /* send immediately */
                         } else if (current < next_send_time) {
                                 usleep((next_send_time - current) / 1000);
                         }
