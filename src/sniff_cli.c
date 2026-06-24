@@ -15,6 +15,8 @@ print_usage(const char *prog_name)
         fprintf(stderr, "  -I <iface>      interface to sniff on (required)\n");
         fprintf(stderr,
                 "  -c <count>      stop after receiving count packets\n");
+        fprintf(stderr, "  -v              increase verbosity (can be used "
+                        "multiple times)\n");
         fprintf(stderr, "  -h              print help and exit\n");
 }
 
@@ -25,13 +27,16 @@ sniff_cli_main(int argc, char *argv[])
         memset(&config, 0, sizeof(config));
 
         int opt;
-        while ((opt = getopt(argc, argv, "I:c:h")) != -1) {
+        while ((opt = getopt(argc, argv, "I:c:vh")) != -1) {
                 switch (opt) {
                 case 'I':
                         config.iface = optarg;
                         break;
                 case 'c':
                         config.max_packets = atoi(optarg);
+                        break;
+                case 'v':
+                        config.verbosity++;
                         break;
                 case 'h':
                         print_usage(argv[0]);

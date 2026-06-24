@@ -4,9 +4,13 @@
 
 #include <arpa/inet.h>
 #include <net/ethernet.h>
+#include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,11 +110,13 @@ sniff_run(const sniff_config_t *config)
                     eth->ether_dhost[2], eth->ether_dhost[3],
                     eth->ether_dhost[4], eth->ether_dhost[5], eth_type);
 
+                uint8_t l4_proto = 0;
                 size_t offset = sizeof(struct ether_header);
                 if (eth_type == ETHERTYPE_IP &&
                     n >= (ssize_t)(offset + sizeof(struct ip))) {
                         struct ip *ip_hdr = (struct ip *)(buf + offset);
                         int hlen = ip_hdr->ip_hl << 2;
+                        l4_proto = ip_hdr->ip_p;
                         char src_ip[INET_ADDRSTRLEN];
                         char dst_ip[INET_ADDRSTRLEN];
                         inet_ntop(AF_INET, &ip_hdr->ip_src, src_ip,
@@ -125,6 +131,7 @@ sniff_run(const sniff_config_t *config)
                 } else if (eth_type == ETHERTYPE_IPV6 &&
                            n >= (ssize_t)(offset + sizeof(struct ip6_hdr))) {
                         struct ip6_hdr *ip6 = (struct ip6_hdr *)(buf + offset);
+                        l4_proto = ip6->ip6_nxt;
                         char src_ip[INET6_ADDRSTRLEN];
                         char dst_ip[INET6_ADDRSTRLEN];
                         inet_ntop(AF_INET6, &ip6->ip6_src, src_ip,
@@ -136,7 +143,66 @@ sniff_run(const sniff_config_t *config)
                         offset += sizeof(struct ip6_hdr);
                 }
 
-                if ((ssize_t)offset < n) {
+                if (config->verbosity >= 1 && l4_proto != 0) {
+                        if (l4_proto == IPPROTO_TCP &&
+                            n >= (ssize_t)(offset + sizeof(struct tcphdr))) {
+                                struct tcphdr *tcp =
+                                    (struct tcphdr *)(buf + offset);
+                                printf("    \033[1;36m[TCP]\033[0m %u -> %u [",
+                                       ntohs(tcp->th_sport),
+                                       ntohs(tcp->th_dport));
+                                if (tcp->th_flags & TH_SYN)
+                                        printf("S");
+                                if (tcp->th_flags & TH_ACK)
+                                        printf("A");
+                                if (tcp->th_flags & TH_FIN)
+                                        printf("F");
+                                if (tcp->th_flags & TH_RST)
+                                        printf("R");
+                                if (tcp->th_flags & TH_PUSH)
+                                        printf("P");
+                                if (tcp->th_flags & TH_URG)
+                                        printf("U");
+                                printf("] Seq: %u, Ack: %u, Win: %u\n",
+                                       ntohl(tcp->th_seq), ntohl(tcp->th_ack),
+                                       ntohs(tcp->th_win));
+                                offset += tcp->th_off << 2;
+                        } else if (l4_proto == IPPROTO_UDP &&
+                                   n >= (ssize_t)(offset +
+                                                  sizeof(struct udphdr))) {
+                                struct udphdr *udp =
+                                    (struct udphdr *)(buf + offset);
+                                printf("    \033[1;36m[UDP]\033[0m %u -> %u "
+                                       "(Len: %u)\n",
+                                       ntohs(udp->uh_sport),
+                                       ntohs(udp->uh_dport),
+                                       ntohs(udp->uh_ulen));
+                                offset += sizeof(struct udphdr);
+                        } else if (l4_proto == IPPROTO_ICMP &&
+                                   n >= (ssize_t)(offset + 8)) {
+                                struct icmp *icmp =
+                                    (struct icmp *)(buf + offset);
+                                printf("    \033[1;36m[ICMP]\033[0m Type: %u, "
+                                       "Code: %u\n",
+                                       icmp->icmp_type, icmp->icmp_code);
+                                offset += 8;
+                        } else if (l4_proto == IPPROTO_ICMPV6 &&
+                                   n >= (ssize_t)(offset +
+                                                  sizeof(struct icmp6_hdr))) {
+                                struct icmp6_hdr *icmp6 =
+                                    (struct icmp6_hdr *)(buf + offset);
+                                printf("    \033[1;36m[ICMPv6]\033[0m Type: "
+                                       "%u, Code: %u\n",
+                                       icmp6->icmp6_type, icmp6->icmp6_code);
+                                offset += sizeof(struct icmp6_hdr);
+                        }
+                }
+
+                if (config->verbosity >= 3 && n > 0) {
+                        printf("    \033[1;35m[Full Packet Dump]\033[0m\n");
+                        print_hex_dump(buf, n);
+                } else if (config->verbosity >= 2 && (ssize_t)offset < n) {
+                        printf("    \033[1;35m[Payload Dump]\033[0m\n");
                         print_hex_dump(buf + offset, n - offset);
                 }
 
