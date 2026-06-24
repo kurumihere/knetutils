@@ -43,6 +43,22 @@ print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
         }
 }
 
+static void
+update_ping_stats(uint64_t rtt, uint64_t *rtt_min, uint64_t *rtt_max,
+                  uint64_t *rtt_sum, uint64_t *rtt_sum_us,
+                  uint64_t *rtt_sum_squares_us, uint64_t *rtt_last)
+{
+        if (*rtt_min == 0 || rtt < *rtt_min)
+                *rtt_min = rtt;
+        if (rtt > *rtt_max)
+                *rtt_max = rtt;
+        *rtt_sum += rtt;
+        uint64_t rtt_us = rtt / 1000;
+        *rtt_sum_us += rtt_us;
+        *rtt_sum_squares_us += rtt_us * rtt_us;
+        *rtt_last = rtt;
+}
+
 static uint64_t
 integer_sqrt(uint64_t n)
 {
@@ -332,57 +348,42 @@ ping_run(const ping_config_t *config)
                                 continue;
                         }
 
-                        if (config->flood) {
-                                uint64_t recv_time = get_time_ns();
-                                uint64_t rtt =
-                                    time_diff_ns(send_time, recv_time);
-
-                                if (rtt_min == 0 || rtt < rtt_min)
-                                        rtt_min = rtt;
-                                if (rtt > rtt_max)
-                                        rtt_max = rtt;
-                                rtt_sum += rtt;
-                                uint64_t rtt_us = rtt / 1000;
-                                rtt_sum_us += rtt_us;
-                                rtt_sum_squares_us += rtt_us * rtt_us;
-                                rtt_last = rtt;
-
-                                received++;
-                                got_reply = true;
-                                replied = true;
-                                printf("\b \b");
-                                if (config->audible) {
-                                        printf("\a");
-                                }
-                                fflush(stdout);
-
-                                if (config->count > 0 &&
-                                    received >= config->count) {
-                                        keep_running = false;
-                                }
-                                break;
-                        }
-
-                        if (r_seq != htons(seq)) {
+                        if (!config->flood && r_seq != htons(seq)) {
                                 continue;
                         }
 
                         uint64_t recv_time = get_time_ns();
                         uint64_t rtt = 0;
-
                         if (recv_time >= send_time) {
                                 rtt = time_diff_ns(send_time, recv_time);
                         }
 
-                        if (rtt_min == 0 || rtt < rtt_min)
-                                rtt_min = rtt;
-                        if (rtt > rtt_max)
-                                rtt_max = rtt;
-                        rtt_sum += rtt;
-                        uint64_t rtt_us = rtt / 1000;
-                        rtt_sum_us += rtt_us;
-                        rtt_sum_squares_us += rtt_us * rtt_us;
-                        rtt_last = rtt;
+                        update_ping_stats(rtt, &rtt_min, &rtt_max, &rtt_sum,
+                                          &rtt_sum_us, &rtt_sum_squares_us,
+                                          &rtt_last);
+
+                        received++;
+                        got_reply = true;
+                        replied = true;
+
+                        if (config->flood) {
+                                printf("\b \b");
+                                fflush(stdout);
+                        }
+
+                        if (config->audible) {
+                                printf("\a");
+                                fflush(stdout);
+                        }
+
+                        if (config->flood && config->count > 0 &&
+                            received >= config->count) {
+                                keep_running = false;
+                        }
+
+                        if (config->flood) {
+                                break;
+                        }
 
                         char src_str[INET6_ADDRSTRLEN];
                         getnameinfo((struct sockaddr *)&src_addr, src_addr_len,
@@ -392,13 +393,6 @@ ping_run(const ping_config_t *config)
                         print_ping_reply(config, rtt, n, hlen, src_str, r_seq,
                                          ttl);
 
-                        received++;
-                        got_reply = true;
-                        replied = true;
-                        if (config->audible) {
-                                printf("\a");
-                                fflush(stdout);
-                        }
                         break;
                 }
 
