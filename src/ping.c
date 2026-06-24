@@ -91,7 +91,6 @@ ping_run(const ping_config_t *config)
         pfd.fd = net_get_fd(sock);
         pfd.events = POLLIN;
 
-        uint64_t next_send = get_time_ns();
 
         int icmp_type_req =
             (config->family == AF_INET6) ? ICMP6_ECHO_REQUEST : ICMP_ECHO;
@@ -133,22 +132,29 @@ ping_run(const ping_config_t *config)
                         icp->icmp6_cksum = 0;
                 }
 
+                uint64_t send_time = get_time_ns();
+                if (config->flood) {
+                        printf(".");
+                        fflush(stdout);
+                }
+
                 if (net_send_icmp_packet(
                         sock, packet, total_len,
                         (struct sockaddr *)&config->target_addr,
                         config->target_addr_len) < 0) {
-                        log_err("Failed to send ICMP packet: %s",
-                                strerror(errno));
+                        log_err("Failed to send ICMP packet");
                 }
                 sent++;
                 free(packet);
 
-                next_send += config->interval_ns;
-                uint64_t expire = get_time_ns() + config->timeout_ns;
-                bool replied = false;
+                uint64_t now = get_time_ns();
+                uint64_t next_send = send_time + config->interval_ns;
+                uint64_t wait_until = config->flood ? next_send : (now + config->timeout_ns);
 
-                while (get_time_ns() < expire && keep_running) {
-                        int64_t timeout_ns = expire - get_time_ns();
+                bool got_reply = false;
+                bool replied = false;
+                while (get_time_ns() < wait_until && keep_running) {
+                        int64_t timeout_ns = wait_until - get_time_ns();
                         if (timeout_ns <= 0)
                                 break;
                         int timeout_ms = timeout_ns / 1000000;
@@ -198,60 +204,70 @@ ping_run(const ping_config_t *config)
                                         r_seq = r_icp->icmp6_seq;
                                 }
 
-                                if (r_type == icmp_type_rep && (is_dgram || r_id == htons(pid)) && r_seq == htons(seq)) {
-                                        uint64_t recv_time = get_time_ns();
-                                        uint64_t rtt = 0;
+                                if (r_type == icmp_type_rep && (is_dgram || r_id == htons(pid))) {
+                                        if (config->flood) {
+                                                uint64_t recv_time = get_time_ns();
+                                                uint64_t rtt = time_diff_ns(send_time, recv_time);
+                                                
+                                                if (rtt_min == 0 || rtt < rtt_min) rtt_min = rtt;
+                                                if (rtt > rtt_max) rtt_max = rtt;
+                                                rtt_sum += rtt;
+                                                
+                                                received++;
+                                                got_reply = true;
+                                                replied = true;
+                                                printf("\b \b");
+                                                fflush(stdout);
+                                                
+                                                if (config->count > 0 && received >= config->count) {
+                                                        keep_running = false;
+                                                }
+                                                break;
+                                        } else if (r_seq == htons(seq)) {
+                                                uint64_t recv_time = get_time_ns();
+                                                uint64_t rtt = 0;
 
-                                        if (config->payload_size >= 8 &&
-                                            n >= (ssize_t)(hlen + header_size +
-                                                           8)) {
-                                                uint64_t *orig_timestamp =
-                                                    (uint64_t *)(recv_buf +
-                                                                 hlen +
-                                                                 header_size);
-                                                rtt =
-                                                    recv_time - *orig_timestamp;
-                                        }
+                                                if (recv_time >= send_time) {
+                                                        rtt = time_diff_ns(send_time, recv_time);
+                                                }
 
-                                        if (received == 0) {
-                                                rtt_min = rtt_max = rtt;
-                                        } else {
-                                                if (rtt < rtt_min)
+                                                if (rtt_min == 0 || rtt < rtt_min)
                                                         rtt_min = rtt;
                                                 if (rtt > rtt_max)
                                                         rtt_max = rtt;
-                                        }
-                                        rtt_sum += rtt;
+                                                rtt_sum += rtt;
 
-                                        char src_str[INET6_ADDRSTRLEN];
-                                        getnameinfo(
-                                            (struct sockaddr *)&src_addr,
-                                            src_addr_len, src_str,
-                                            sizeof(src_str), NULL, 0,
-                                            NI_NUMERICHOST);
+                                                char src_str[INET6_ADDRSTRLEN];
+                                                getnameinfo(
+                                                    (struct sockaddr *)&src_addr,
+                                                    src_addr_len, src_str,
+                                                    sizeof(src_str), NULL, 0,
+                                                    NI_NUMERICHOST);
 
-                                        if (!config->quiet) {
-                                                if (config->cisco_style) {
-                                                    printf("!");
-                                                    fflush(stdout);
-                                                } else {
-                                                    char time_buf[64] = "N/A";
-                                                    if (config->payload_size >= 8) {
-                                                        format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
-                                                    }
-                                                    if (ttl >= 0) {
-                                                        printf("%zd bytes from %s: icmp_seq=%u ttl=%d time=%s\n",
-                                                               n - hlen, src_str, ntohs(r_seq), ttl, time_buf);
-                                                    } else {
-                                                        printf("%zd bytes from %s: icmp_seq=%u time=%s\n",
-                                                               n - hlen, src_str, ntohs(r_seq), time_buf);
-                                                    }
+                                                if (!config->quiet) {
+                                                        if (config->cisco_style) {
+                                                            printf("!");
+                                                            fflush(stdout);
+                                                        } else {
+                                                            char time_buf[64] = "N/A";
+                                                            if (config->payload_size >= 8) {
+                                                                format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
+                                                            }
+                                                            if (ttl >= 0) {
+                                                                printf("%zd bytes from %s: icmp_seq=%u ttl=%d time=%s\n",
+                                                                       n - hlen, src_str, ntohs(r_seq), ttl, time_buf);
+                                                            } else {
+                                                                printf("%zd bytes from %s: icmp_seq=%u time=%s\n",
+                                                                       n - hlen, src_str, ntohs(r_seq), time_buf);
+                                                            }
+                                                        }
                                                 }
-                                        }
 
-                                        received++;
-                                        replied = true;
-                                        break;
+                                                received++;
+                                                got_reply = true;
+                                                replied = true;
+                                                break;
+                                        }
                                 }
                         }
                 }
@@ -259,7 +275,7 @@ ping_run(const ping_config_t *config)
                 if (!keep_running)
                         break;
 
-                if (!replied && !config->quiet) {
+                if (!replied && !config->quiet && !config->flood) {
                         if (config->cisco_style) {
                                 printf(".");
                                 fflush(stdout);
@@ -270,10 +286,15 @@ ping_run(const ping_config_t *config)
 
                 seq++;
 
-                if (keep_running && sent < config->count) {
-                        uint64_t now = get_time_ns();
-                        if (now < next_send) {
-                                usleep((next_send - now) / 1000);
+                if (keep_running &&
+                    (config->count == 0 || sent < config->count)) {
+                        uint64_t current = get_time_ns();
+                        uint64_t next_send_time = send_time + config->interval_ns;
+                        
+                        if (config->flood && got_reply) {
+                                /* send immediately */
+                        } else if (current < next_send_time) {
+                                usleep((next_send_time - current) / 1000);
                         }
                 }
         }

@@ -24,6 +24,7 @@ print_usage(const char *prog_name)
                         "default: auto-scaling\n");
         fprintf(stderr, "  -s <size>       payload size in bytes\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
+        fprintf(stderr, "  -f              flood ping (prints . for send, \\b for recv)\n");
         fprintf(stderr, "  -C              cisco-style output\n");
         fprintf(stderr, "  -q              quiet output\n");
         fprintf(stderr, "  -h              print help and exit\n");
@@ -44,7 +45,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qCh")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -54,6 +55,10 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'C':
                         config.cisco_style = true;
+                        break;
+                case 'f':
+                        config.flood = true;
+                        config.interval_ns = 10000000ULL; /* 10 ms */
                         break;
                 case 'c':
                         config.count = (uint32_t)atoi(optarg);
