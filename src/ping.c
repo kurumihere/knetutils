@@ -49,6 +49,7 @@ ping_run(const ping_config_t *config)
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
         }
+        bool is_dgram = net_is_dgram(sock);
 
         if (config->ttl > 0) {
                 int ttl = config->ttl;
@@ -165,7 +166,7 @@ ping_run(const ping_config_t *config)
 
                                 int hlen = 0;
                                 int ttl = -1;
-                                if (config->family == AF_INET) {
+                                if (config->family == AF_INET && !is_dgram) {
                                         struct ip *ip_hdr =
                                             (struct ip *)recv_buf;
                                         hlen = ip_hdr->ip_hl << 2;
@@ -192,8 +193,7 @@ ping_run(const ping_config_t *config)
                                         r_seq = r_icp->icmp6_seq;
                                 }
 
-                                if (r_type == icmp_type_rep &&
-                                    r_id == htons(pid) && r_seq == htons(seq)) {
+                                if (r_type == icmp_type_rep && (is_dgram || r_id == htons(pid)) && r_seq == htons(seq)) {
                                         uint64_t recv_time = get_time_ns();
                                         uint64_t rtt = 0;
 

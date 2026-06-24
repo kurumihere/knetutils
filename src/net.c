@@ -19,6 +19,7 @@
 struct net_socket {
         int fd;
         int ifindex;
+        bool is_dgram;
 };
 
 #else
@@ -32,6 +33,7 @@ struct net_socket {
 
 struct net_socket {
         int fd;
+        bool is_dgram;
         uint8_t *bpf_buf;
         size_t bpf_buf_len;
         size_t bpf_pos;
@@ -136,6 +138,7 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
         }
         sock->fd = fd;
         sock->ifindex = ifindex;
+        sock->is_dgram = false;
         return sock;
 #else
         (void)protocol;
@@ -173,6 +176,7 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
                 return NULL;
         }
         sock->fd = fd;
+        sock->is_dgram = false;
         sock->bpf_buf_len = blen;
         sock->bpf_buf = malloc(blen);
         sock->bpf_pos = 0;
@@ -192,20 +196,33 @@ net_socket_t *
 net_open_icmp_socket(int family)
 {
         int proto = (family == AF_INET6) ? IPPROTO_ICMPV6 : IPPROTO_ICMP;
+        bool is_dgram = false;
         int fd = socket(family, SOCK_RAW, proto);
-        if (fd < 0)
-                return NULL;
+        if (fd < 0) {
+                fd = socket(family, SOCK_DGRAM, proto);
+                if (fd < 0) {
+                        return NULL;
+                }
+                is_dgram = true;
+        }
         net_socket_t *sock = malloc(sizeof(net_socket_t));
         if (!sock) {
                 close(fd);
                 return NULL;
         }
         sock->fd = fd;
+        sock->is_dgram = is_dgram;
 #ifndef __linux__
         sock->bpf_buf = NULL;
         sock->bpf_buf_len = 0;
 #endif
         return sock;
+}
+
+bool
+net_is_dgram(net_socket_t *sock)
+{
+        return sock ? sock->is_dgram : false;
 }
 
 void

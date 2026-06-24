@@ -29,6 +29,7 @@ bool net_parse_mac(const char *mac_str, uint8_t *mac);
 bool net_get_default_gateway(const char *iface, uint32_t *gateway_ip);
 
 net_socket_t *net_open_icmp_socket(int family);
+bool net_is_dgram(net_socket_t *sock);
 ssize_t net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
                              const struct sockaddr *dest, socklen_t dest_len);
 ssize_t net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
