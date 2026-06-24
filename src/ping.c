@@ -80,13 +80,13 @@ integer_sqrt(uint64_t n)
         return root;
 }
 
-static volatile bool keep_running = true;
+static volatile sig_atomic_t keep_running = 1;
 
 static void
 handle_sigint(int sig)
 {
         (void)sig;
-        keep_running = false;
+        keep_running = 0;
 }
 
 int

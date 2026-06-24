@@ -25,13 +25,13 @@
 #define TH_ACK 0x10
 #endif
 
-static volatile bool keep_running = true;
+static volatile sig_atomic_t keep_running = 1;
 
 static void
 handle_sigint(int sig)
 {
         (void)sig;
-        keep_running = false;
+        keep_running = 0;
 }
 
 struct ipv4_pseudo_header {
