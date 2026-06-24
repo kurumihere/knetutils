@@ -8,19 +8,19 @@ INCLUDES = -I./include
 
 ALL_CFLAGS = $(CFLAGS) $(WARNING_FLAGS) $(STANDARD_FLAGS) $(INCLUDES)
 
-SRCS = src/arping.c \
-       src/arping_cli.c \
-       src/main.c \
-       src/net.c \
-       src/ping.c \
-       src/ping_cli.c \
-       src/sniff.c \
-       src/sniff_cli.c \
-       src/tcping.c \
-       src/tcping_cli.c \
-       src/traceroute.c \
-       src/traceroute_cli.c \
-       src/utils.c
+SRCS = src/core/main.c \
+       src/core/net.c \
+       src/core/utils.c \
+       src/tools/arping/arping.c \
+       src/tools/arping/arping_cli.c \
+       src/tools/ping/ping.c \
+       src/tools/ping/ping_cli.c \
+       src/tools/sniff/sniff.c \
+       src/tools/sniff/sniff_cli.c \
+       src/tools/tcping/tcping.c \
+       src/tools/tcping/tcping_cli.c \
+       src/tools/traceroute/traceroute.c \
+       src/tools/traceroute/traceroute_cli.c
 
 OBJS = $(SRCS:.c=.o)
 
@@ -70,5 +70,11 @@ analyze: clean
 format:
 	clang-format -i $(SRCS) include/*.h
 
-.PHONY: all links clean install uninstall analyze format
+lint:
+	clang-tidy $(SRCS) include/*.h -- $(INCLUDES) $(STANDARD_FLAGS)
 
+test: all
+	@echo "Running basic tests..."
+	@./tests/test_basic.sh
+
+.PHONY: all links clean install uninstall analyze format lint test

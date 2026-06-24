@@ -1,0 +1,64 @@
+.TH KNETUTILS 8 "June 2026" "knetutils" "System Manager's Manual"
+.SH NAME
+knetutils \- Modern, cross-platform set of senior-level C network utilities
+.SH SYNOPSIS
+.B knetutils
+.I command
+[
+.I options
+]
+.br
+.B arping
+[
+.I options
+]
+.br
+.B ping
+[
+.I options
+]
+.br
+.B sniff
+[
+.I options
+]
+.br
+.B tcping
+[
+.I options
+]
+.br
+.B traceroute
+[
+.I options
+]
+.SH DESCRIPTION
+.B knetutils
+is a single-binary suite of advanced network utilities designed with zero magic numbers, safe memory management, and cross-platform BPF/AF_PACKET abstractions.
+.PP
+The suite includes the following commands:
+.TP
+.B arping
+Send ARP requests to a neighbor host.
+.TP
+.B ping
+Send ICMP ECHO_REQUEST to network hosts.
+.TP
+.B sniff
+A minimal packet sniffer for capturing and inspecting L2/L3/L4 traffic.
+.TP
+.B tcping
+Measure TCP connection latency to a specific port.
+.TP
+.B traceroute
+Trace the route to a remote host using UDP or ICMP probes.
+.SH OPTIONS
+To view specific options for a command, run:
+.PP
+.RS
+.B knetutils
+.I command
+.B \-h
+.RE
+.SH AUTHOR
+knetutils developers.
