@@ -4,6 +4,7 @@
 
 int arping_cli_main(int argc, char *argv[]);
 int ping_cli_main(int argc, char *argv[]);
+int traceroute_cli_main(int argc, char *argv[]);
 
 static const char *
 get_basename(const char *path)
@@ -24,6 +25,8 @@ main(int argc, char *argv[])
                 return arping_cli_main(argc, argv);
         } else if (strcmp(prog_name, "ping") == 0) {
                 return ping_cli_main(argc, argv);
+        } else if (strcmp(prog_name, "traceroute") == 0) {
+                return traceroute_cli_main(argc, argv);
         }
 
         if (argc < 2) {
@@ -31,6 +34,7 @@ main(int argc, char *argv[])
                 fprintf(stderr, "Commands:\n");
                 fprintf(stderr, "  arping\n");
                 fprintf(stderr, "  ping\n");
+                fprintf(stderr, "  traceroute\n");
                 return EXIT_FAILURE;
         }
 
@@ -39,6 +43,8 @@ main(int argc, char *argv[])
                 return arping_cli_main(argc - 1, argv + 1);
         } else if (strcmp(cmd, "ping") == 0) {
                 return ping_cli_main(argc - 1, argv + 1);
+        } else if (strcmp(cmd, "traceroute") == 0) {
+                return traceroute_cli_main(argc - 1, argv + 1);
         }
 
         fprintf(stderr, "knetutils: Unknown command '%s'\n", cmd);
