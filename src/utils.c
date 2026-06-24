@@ -20,7 +20,7 @@ log_warn(const char *fmt, ...)
 {
         va_list args;
         va_start(args, fmt);
-        fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN]  " COLOR_RESET);
+        fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
         fprintf(stderr, "\n");
         va_end(args);
@@ -31,7 +31,7 @@ log_info(const char *fmt, ...)
 {
         va_list args;
         va_start(args, fmt);
-        fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO]  " COLOR_RESET);
+        fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
         vfprintf(stdout, fmt, args);
         fprintf(stdout, "\n");
         va_end(args);
