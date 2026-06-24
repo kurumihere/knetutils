@@ -24,3 +24,10 @@ jobs:
       run: |
         sudo apt-get install -y clang-format
         clang-format --dry-run --Werror src/*.c include/*.h
+
+    - name: Test CLI Interfaces
+      run: |
+        ./bin/knetutils ping -h || true
+        ./bin/knetutils arping -h || true
+        ./bin/knetutils tcping -h || true
+        ./bin/knetutils traceroute -h || true

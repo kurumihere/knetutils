@@ -13,7 +13,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <unistd.h>
+
+static void
+print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
+                 const char *src_str, uint16_t r_seq, int ttl)
+{
+        if (config->quiet)
+                return;
+
+        if (config->cisco_style) {
+                printf("!");
+                fflush(stdout);
+                return;
+        }
+
+        char time_buf[64] = "N/A";
+        if (config->payload_size >= 8) {
+                format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
+        }
+
+        if (ttl >= 0) {
+                printf("%zd bytes from %s: icmp_seq=%u ttl=%d time=%s\n",
+                       n - hlen, src_str, ntohs(r_seq), ttl, time_buf);
+        } else {
+                printf("%zd bytes from %s: icmp_seq=%u time=%s\n", n - hlen,
+                       src_str, ntohs(r_seq), time_buf);
+        }
+}
 
 static uint64_t
 integer_sqrt(uint64_t n)
@@ -361,32 +389,8 @@ ping_run(const ping_config_t *config)
                                     src_str, sizeof(src_str), NULL, 0,
                                     NI_NUMERICHOST);
 
-                        if (!config->quiet) {
-                                if (config->cisco_style) {
-                                        printf("!");
-                                        fflush(stdout);
-                                } else {
-                                        char time_buf[64] = "N/A";
-                                        if (config->payload_size >= 8) {
-                                                format_time(
-                                                    rtt, config->time_unit,
-                                                    time_buf, sizeof(time_buf));
-                                        }
-                                        if (ttl >= 0) {
-                                                printf("%zd bytes from %s: "
-                                                       "icmp_seq=%u ttl=%d "
-                                                       "time=%s\n",
-                                                       n - hlen, src_str,
-                                                       ntohs(r_seq), ttl,
-                                                       time_buf);
-                                        } else {
-                                                printf("%zd bytes from %s: "
-                                                       "icmp_seq=%u time=%s\n",
-                                                       n - hlen, src_str,
-                                                       ntohs(r_seq), time_buf);
-                                        }
-                                }
-                        }
+                        print_ping_reply(config, rtt, n, hlen, src_str, r_seq,
+                                         ttl);
 
                         received++;
                         got_reply = true;
