@@ -24,9 +24,8 @@ print_usage(const char *prog_name)
                         "default: auto-scaling\n");
         fprintf(stderr, "  -s <size>       payload size in bytes\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
-        fprintf(
-            stderr,
-            "  -f              flood ping (prints . for send, \\b for recv)\n");
+        fprintf(stderr, "  -a              audible ping (print \\a on reply)\n");
+        fprintf(stderr, "  -f              flood ping (prints . for send, \\b for recv)\n");
         fprintf(
             stderr,
             "  -I <iface/ip>   bind to a specific interface or IP address\n");
@@ -50,7 +49,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:qChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:aqChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -60,6 +59,9 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'C':
                         config.cisco_style = true;
+                        break;
+                case 'a':
+                        config.audible = true;
                         break;
                 case 'f':
                         config.flood = true;

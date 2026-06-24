@@ -260,6 +260,9 @@ ping_run(const ping_config_t *config)
                                 got_reply = true;
                                 replied = true;
                                 printf("\b \b");
+                                if (config->audible) {
+                                        printf("\a");
+                                }
                                 fflush(stdout);
 
                                 if (config->count > 0 &&
@@ -321,6 +324,10 @@ ping_run(const ping_config_t *config)
                         received++;
                         got_reply = true;
                         replied = true;
+                        if (config->audible) {
+                                printf("\a");
+                                fflush(stdout);
+                        }
                         break;
                 }
 
