@@ -14,31 +14,31 @@ print_usage(const char *prog_name)
                 prog_name);
         fprintf(stderr, "Options:\n");
         fprintf(stderr,
-                "  -I <interface>  Specify network interface (e.g. eth0)\n");
+                "  -I <interface>  specify network interface (e.g. eth0)\n");
         fprintf(stderr,
-                "  -c <count>      Stop after sending count ARP requests\n");
-        fprintf(stderr, "  -w <timeout>    Time to wait for reply in "
+                "  -c <count>      stop after sending count ARP requests\n");
+        fprintf(stderr, "  -w <timeout>    time to wait for reply in "
                         "milliseconds (default 1000)\n");
-        fprintf(stderr, "  -i <interval>   Time to wait between requests in "
+        fprintf(stderr, "  -i <interval>   time to wait between requests in "
                         "milliseconds (default 1000)\n");
-        fprintf(stderr, "  -S <source_ip>  Specify source IP address (default "
+        fprintf(stderr, "  -S <source_ip>  specify source IP address (default "
                         "is interface IP)\n");
-        fprintf(stderr, "  -U              Unsolicited ARP mode (updates "
+        fprintf(stderr, "  -U              unsolicited ARP mode (updates "
                         "neighbors' ARP caches)\n");
         fprintf(stderr,
-                "  -d              Duplicate Address Detection (DAD) mode\n");
-        fprintf(stderr, "  -G              Use default gateway as target\n");
-        fprintf(stderr, "  -C              Cisco style output (! for reply, . "
+                "  -d              duplicate Address Detection (DAD) mode\n");
+        fprintf(stderr, "  -G              use default gateway as target\n");
+        fprintf(stderr, "  -C              cisco style output (! for reply, . "
                         "for timeout)\n");
-        fprintf(stderr, "  -f              Quit on first reply\n");
+        fprintf(stderr, "  -f              quit on first reply\n");
         fprintf(stderr,
-                "  -A              Send ARP Reply instead of Request\n");
-        fprintf(stderr, "  -b              Keep broadcasting (do not switch to "
+                "  -A              send ARP Reply instead of Request\n");
+        fprintf(stderr, "  -b              keep broadcasting (do not switch to "
                         "unicast after first reply)\n");
-        fprintf(stderr, "  -u <unit>       Time unit for output (ns, us, ms). "
-                        "Default: auto-scaling\n");
-        fprintf(stderr, "  -q              Quiet output\n");
-        fprintf(stderr, "  -h              Print this help\n");
+        fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
+                        "default: auto-scaling\n");
+        fprintf(stderr, "  -q              quiet output\n");
+        fprintf(stderr, "  -h              print help and exit\n");
 }
 
 int

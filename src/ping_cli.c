@@ -13,20 +13,20 @@ print_usage(const char *prog_name)
 {
         fprintf(stderr, "Usage: %s [options] <destination>\n", prog_name);
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -c <count>      Stop after sending count "
+        fprintf(stderr, "  -c <count>      stop after sending count "
                         "ECHO_REQUEST packets\n");
         fprintf(
             stderr,
-            "  -w <timeout>    Time to wait for a response, in milliseconds\n");
-        fprintf(stderr, "  -i <interval>   Wait interval milliseconds between "
+            "  -w <timeout>    time to wait for a response, in milliseconds\n");
+        fprintf(stderr, "  -i <interval>   wait interval milliseconds between "
                         "sending each packet\n");
-        fprintf(stderr, "  -u <unit>       Time unit for output (ns, us, ms). "
-                        "Default: auto-scaling\n");
-        fprintf(stderr, "  -s <size>       Payload size in bytes\n");
-        fprintf(stderr, "  -t <ttl>        Time to live (TTL)\n");
-        fprintf(stderr, "  -C              Cisco-style output\n");
-        fprintf(stderr, "  -q              Quiet output\n");
-        fprintf(stderr, "  -h              Print this help\n");
+        fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
+                        "default: auto-scaling\n");
+        fprintf(stderr, "  -s <size>       payload size in bytes\n");
+        fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
+        fprintf(stderr, "  -C              cisco-style output\n");
+        fprintf(stderr, "  -q              quiet output\n");
+        fprintf(stderr, "  -h              print help and exit\n");
 }
 
 int
