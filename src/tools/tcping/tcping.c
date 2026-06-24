@@ -210,7 +210,7 @@ tcping_run(const tcping_config_t *config)
                         if (ret <= 0 || !(pfd.revents & POLLIN))
                                 continue;
 
-                        uint8_t recv_buf[4096];
+                        __attribute__((aligned(8))) uint8_t recv_buf[4096];
                         struct sockaddr_storage from_addr;
                         socklen_t from_addr_len = sizeof(from_addr);
                         ssize_t n =

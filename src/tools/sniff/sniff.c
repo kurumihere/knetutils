@@ -91,7 +91,7 @@ sniff_run(const sniff_config_t *config)
         log_info("Sniffing on interface %s...", config->iface);
 
         int packets_captured = 0;
-        uint8_t buf[65536];
+        __attribute__((aligned(8))) uint8_t buf[65536];
 
         while (keep_running && (config->max_packets == 0 ||
                                 packets_captured < config->max_packets)) {

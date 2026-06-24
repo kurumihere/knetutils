@@ -307,7 +307,7 @@ ping_run(const ping_config_t *config)
                         if (ret <= 0 || !(pfd.revents & POLLIN))
                                 continue;
 
-                        uint8_t recv_buf[4096];
+                        __attribute__((aligned(8))) uint8_t recv_buf[4096];
                         struct sockaddr_storage src_addr;
                         socklen_t src_addr_len = sizeof(src_addr);
                         ssize_t n = net_recv_icmp_packet(

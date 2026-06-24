@@ -160,7 +160,7 @@ arping_run(const arping_config_t *config)
                         if (!(pfd.revents & POLLIN))
                                 continue;
 
-                        uint8_t recv_buf[4096];
+                        __attribute__((aligned(8))) uint8_t recv_buf[4096];
                         ssize_t n =
                             net_recv_packet(sock, recv_buf, sizeof(recv_buf));
                         if (n < 0)
