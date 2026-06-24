@@ -51,6 +51,39 @@ ping_run(const ping_config_t *config)
         }
         bool is_dgram = net_is_dgram(sock);
 
+        if (config->bind_iface) {
+                struct sockaddr_storage bind_addr;
+                memset(&bind_addr, 0, sizeof(bind_addr));
+                if (inet_pton(AF_INET, config->bind_iface,
+                              &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
+                    1) {
+                        bind_addr.ss_family = AF_INET;
+                        if (bind(net_get_fd(sock),
+                                 (struct sockaddr *)&bind_addr,
+                                 sizeof(struct sockaddr_in)) < 0) {
+                                die("Failed to bind to IP %s",
+                                    config->bind_iface);
+                        }
+                } else if (inet_pton(AF_INET6, config->bind_iface,
+                                     &((struct sockaddr_in6 *)&bind_addr)
+                                          ->sin6_addr) == 1) {
+                        bind_addr.ss_family = AF_INET6;
+                        if (bind(net_get_fd(sock),
+                                 (struct sockaddr *)&bind_addr,
+                                 sizeof(struct sockaddr_in6)) < 0) {
+                                die("Failed to bind to IP %s",
+                                    config->bind_iface);
+                        }
+                } else {
+                        if (setsockopt(net_get_fd(sock), SOL_SOCKET,
+                                       SO_BINDTODEVICE, config->bind_iface,
+                                       strlen(config->bind_iface)) < 0) {
+                                die("Failed to bind to interface %s",
+                                    config->bind_iface);
+                        }
+                }
+        }
+
         if (config->ttl > 0) {
                 int ttl = config->ttl;
                 int level =

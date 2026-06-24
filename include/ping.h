@@ -18,6 +18,7 @@ typedef struct {
         int family;
         bool cisco_style;
         bool flood;
+        const char *bind_iface;
 } ping_config_t;
 
 int ping_run(const ping_config_t *config);

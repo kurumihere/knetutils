@@ -27,6 +27,9 @@ print_usage(const char *prog_name)
         fprintf(
             stderr,
             "  -f              flood ping (prints . for send, \\b for recv)\n");
+        fprintf(
+            stderr,
+            "  -I <iface/ip>   bind to a specific interface or IP address\n");
         fprintf(stderr, "  -C              cisco-style output\n");
         fprintf(stderr, "  -q              quiet output\n");
         fprintf(stderr, "  -h              print help and exit\n");
@@ -47,7 +50,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:qChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:qChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -61,6 +64,9 @@ ping_cli_main(int argc, char *argv[])
                 case 'f':
                         config.flood = true;
                         config.interval_ns = 10000000ULL; /* 10 ms */
+                        break;
+                case 'I':
+                        config.bind_iface = optarg;
                         break;
                 case 'c':
                         config.count = (uint32_t)atoi(optarg);
