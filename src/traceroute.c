@@ -326,7 +326,7 @@ traceroute_run(const traceroute_config_t *config)
                                 }
 
                                 char time_buf[64];
-                                format_time(rtt, "ms", time_buf,
+                                format_time(rtt, NULL, time_buf,
                                             sizeof(time_buf));
                                 printf("%s  ", time_buf);
                                 fflush(stdout);

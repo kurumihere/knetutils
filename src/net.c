@@ -399,20 +399,22 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
                 struct sockaddr *sa = (struct sockaddr *)(rtm + 1);
                 struct sockaddr_in *gw = NULL;
                 struct sockaddr_in *dst = NULL;
-#define KNET_SA_SIZE(sa)                                                       \
-        ((sa)->sa_len > 0 ? (1 + (((sa)->sa_len - 1) | (sizeof(long) - 1)))    \
-                          : sizeof(long))
+#ifndef ROUNDUP
+#define ROUNDUP(a)                                                             \
+        ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#endif
+#ifndef SA_SIZE
+#define SA_SIZE(sa) ROUNDUP((sa)->sa_len)
+#endif
                 for (int i = 0; i < RTAX_MAX; i++) {
-                        if (rtm->rtm_addrs & (1 << i)) {
-                                if (i == RTAX_GATEWAY)
-                                        gw = (struct sockaddr_in *)sa;
-                                if (i == RTAX_DST)
-                                        dst = (struct sockaddr_in *)sa;
-                                sa = (struct sockaddr *)((char *)sa +
-                                                         KNET_SA_SIZE(sa));
-                        }
+                        if (!(rtm->rtm_addrs & (1 << i)))
+                                continue;
+                        if (i == RTAX_GATEWAY)
+                                gw = (struct sockaddr_in *)sa;
+                        if (i == RTAX_DST)
+                                dst = (struct sockaddr_in *)sa;
+                        sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
                 }
-#undef KNET_SA_SIZE
                 if (dst && dst->sin_addr.s_addr == 0 && gw &&
                     rtm->rtm_index == if_nametoindex(iface)) {
                         *gateway_ip = gw->sin_addr.s_addr;

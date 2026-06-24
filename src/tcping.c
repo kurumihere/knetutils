@@ -241,7 +241,7 @@ tcping_run(const tcping_config_t *config)
 
                         if (!config->quiet) {
                                 char time_buf[64];
-                                format_time(rtt, "ms", time_buf,
+                                format_time(rtt, NULL, time_buf,
                                             sizeof(time_buf));
 
                                 if ((r_tcph->th_flags & TH_SYN) &&
