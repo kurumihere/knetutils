@@ -50,19 +50,24 @@ struct ipv6_pseudo_header {
         uint8_t next_header;
 } __attribute__((packed));
 
-int
-tcping_run(const tcping_config_t *config)
-{
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = handle_sigint;
-        sigaction(SIGINT, &sa, NULL);
-        sigaction(SIGTERM, &sa, NULL);
-        sigaction(SIGQUIT, &sa, NULL);
+typedef struct {
+        uint16_t sport;
+        uint32_t seq;
+        uint32_t sent;
+        uint32_t received;
 
-        net_socket_t *sock =
-            net_open_ip_raw_socket(config->family, IPPROTO_TCP);
-        if (!sock) {
+        net_socket_t *sock;
+
+        char target_str[INET6_ADDRSTRLEN];
+        struct sockaddr_storage src_addr;
+        socklen_t src_addr_len;
+} tcping_state_t;
+
+static void
+setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
+{
+        st->sock = net_open_ip_raw_socket(config->family, IPPROTO_TCP);
+        if (!st->sock) {
                 die("Failed to open raw TCP socket. Are you root?");
         }
 
@@ -73,7 +78,7 @@ tcping_run(const tcping_config_t *config)
                               &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
                     1) {
                         bind_addr.ss_family = AF_INET;
-                        if (bind(net_get_fd(sock),
+                        if (bind(net_get_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in)) < 0) {
                                 die("Failed to bind to IP %s",
@@ -83,14 +88,14 @@ tcping_run(const tcping_config_t *config)
                                      &((struct sockaddr_in6 *)&bind_addr)
                                           ->sin6_addr) == 1) {
                         bind_addr.ss_family = AF_INET6;
-                        if (bind(net_get_fd(sock),
+                        if (bind(net_get_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in6)) < 0) {
                                 die("Failed to bind to IP %s",
                                     config->bind_iface);
                         }
                 } else {
-                        if (setsockopt(net_get_fd(sock), SOL_SOCKET,
+                        if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
                                 die("Failed to bind to interface %s",
@@ -98,6 +103,194 @@ tcping_run(const tcping_config_t *config)
                         }
                 }
         }
+}
+
+static void
+init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
+{
+        memset(st, 0, sizeof(*st));
+
+        getnameinfo((struct sockaddr *)&config->target_addr,
+                    config->target_addr_len, st->target_str,
+                    sizeof(st->target_str), NULL, 0, NI_NUMERICHOST);
+
+        st->src_addr_len = sizeof(st->src_addr);
+        if (!net_get_source_ip_for(&config->target_addr,
+                                   config->target_addr_len, &st->src_addr,
+                                   &st->src_addr_len)) {
+                die("Failed to determine source IP for target");
+        }
+
+        st->sport = 1024 + (getpid() % 64000);
+        st->seq = 1000;
+}
+
+static void
+send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
+{
+        struct tcphdr tcph;
+        memset(&tcph, 0, sizeof(tcph));
+        tcph.th_sport = htons(st->sport);
+        tcph.th_dport = htons(config->port);
+        tcph.th_seq = htonl(st->seq);
+        tcph.th_ack = 0;
+        tcph.th_off = 5;
+        tcph.th_flags = TH_SYN;
+        tcph.th_win = htons(64240);
+        tcph.th_sum = 0;
+        tcph.th_urp = 0;
+
+        uint64_t csum_buf_aligned[128];
+        uint8_t *csum_buf = (uint8_t *)csum_buf_aligned;
+        size_t csum_len = 0;
+
+        if (config->family == AF_INET) {
+                struct ipv4_pseudo_header psh;
+                psh.src_addr =
+                    ((struct sockaddr_in *)&st->src_addr)->sin_addr.s_addr;
+                psh.dst_addr = ((struct sockaddr_in *)&config->target_addr)
+                                   ->sin_addr.s_addr;
+                psh.zero = 0;
+                psh.protocol = IPPROTO_TCP;
+                psh.tcp_length = htons(sizeof(struct tcphdr));
+
+                memcpy(csum_buf, &psh, sizeof(psh));
+                csum_len += sizeof(psh);
+        } else {
+                struct ipv6_pseudo_header psh;
+                psh.src_addr =
+                    ((struct sockaddr_in6 *)&st->src_addr)->sin6_addr;
+                psh.dst_addr =
+                    ((struct sockaddr_in6 *)&config->target_addr)->sin6_addr;
+                psh.tcp_length = htonl(sizeof(struct tcphdr));
+                memset(psh.zero, 0, 3);
+                psh.next_header = IPPROTO_TCP;
+
+                memcpy(csum_buf, &psh, sizeof(psh));
+                csum_len += sizeof(psh);
+        }
+
+        memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
+        csum_len += sizeof(tcph);
+
+        tcph.th_sum = net_checksum(csum_buf, csum_len);
+
+        if (net_send_ip_raw(st->sock, &tcph, sizeof(tcph),
+                            (struct sockaddr *)&config->target_addr,
+                            config->target_addr_len) < 0) {
+                log_err("Failed to send TCP SYN packet");
+        }
+        st->sent++;
+}
+
+static void
+print_tcping_reply(const tcping_config_t *config, const tcping_state_t *st,
+                   const struct tcphdr *r_tcph, uint64_t rtt)
+{
+        if (config->quiet)
+                return;
+
+        char time_buf[64];
+        format_time(rtt, NULL, time_buf, sizeof(time_buf));
+
+        if ((r_tcph->th_flags & TH_SYN) && (r_tcph->th_flags & TH_ACK)) {
+                printf("Reply from %s:%u (SYN-ACK) time=%s\n", st->target_str,
+                       config->port, time_buf);
+        } else if (r_tcph->th_flags & TH_RST) {
+                printf("Reply from %s:%u (RST) time=%s\n", st->target_str,
+                       config->port, time_buf);
+        }
+}
+
+static bool
+recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
+                  uint64_t wait_until, uint64_t send_time)
+{
+        struct pollfd pfd;
+        pfd.fd = net_get_fd(st->sock);
+        pfd.events = POLLIN;
+
+        while (get_time_ns() < wait_until && keep_running) {
+                int64_t timeout_ns = wait_until - get_time_ns();
+                if (timeout_ns <= 0)
+                        break;
+                int timeout_ms = timeout_ns / 1000000;
+
+                int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+                if (ret <= 0 || !(pfd.revents & POLLIN))
+                        continue;
+
+                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                struct sockaddr_storage from_addr;
+                socklen_t from_addr_len = sizeof(from_addr);
+                ssize_t n =
+                    net_recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
+                                    &from_addr, &from_addr_len);
+                if (n <= 0)
+                        continue;
+
+                int hlen = 0;
+                if (config->family == AF_INET) {
+                        struct ip *ip_hdr = (struct ip *)recv_buf;
+                        hlen = ip_hdr->ip_hl << 2;
+                }
+
+                if (n < (ssize_t)(hlen + sizeof(struct tcphdr)))
+                        continue;
+
+                struct tcphdr *r_tcph = (struct tcphdr *)(recv_buf + hlen);
+
+                if (r_tcph->th_dport != htons(st->sport) ||
+                    r_tcph->th_sport != htons(config->port)) {
+                        continue;
+                }
+
+                if ((r_tcph->th_flags & TH_SYN) &&
+                    (r_tcph->th_flags & TH_ACK)) {
+                        uint64_t recv_time = get_time_ns();
+                        uint64_t rtt = time_diff_ns(send_time, recv_time);
+                        print_tcping_reply(config, st, r_tcph, rtt);
+                        st->received++;
+                        return true;
+                } else if (r_tcph->th_flags & TH_RST) {
+                        uint64_t recv_time = get_time_ns();
+                        uint64_t rtt = time_diff_ns(send_time, recv_time);
+                        print_tcping_reply(config, st, r_tcph, rtt);
+                        st->received++;
+                        return true;
+                }
+        }
+
+        return false;
+}
+
+static void
+print_tcping_stats(const tcping_config_t *config, const tcping_state_t *st)
+{
+        if (config->quiet)
+                return;
+
+        printf("\n--- %s:%u tcping statistics ---\n", st->target_str,
+               config->port);
+        printf(
+            "%u packets transmitted, %u packets received, %d%% packet loss\n",
+            st->sent, st->received,
+            st->sent == 0 ? 0 : ((st->sent - st->received) * 100) / st->sent);
+}
+
+int
+tcping_run(const tcping_config_t *config)
+{
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigaction(SIGINT, &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
+        sigaction(SIGQUIT, &sa, NULL);
+
+        tcping_state_t st;
+        init_tcping_state(config, &st);
+        setup_tcping_socket(config, &st);
 
         if (setgid(getgid()) != 0) {
                 log_warn("Failed to drop group privileges");
@@ -106,184 +299,31 @@ tcping_run(const tcping_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
-        char target_str[INET6_ADDRSTRLEN];
-        getnameinfo((struct sockaddr *)&config->target_addr,
-                    config->target_addr_len, target_str, sizeof(target_str),
-                    NULL, 0, NI_NUMERICHOST);
-
-        struct sockaddr_storage src_addr;
-        socklen_t src_addr_len = sizeof(src_addr);
-        if (!net_get_source_ip_for(&config->target_addr,
-                                   config->target_addr_len, &src_addr,
-                                   &src_addr_len)) {
-                die("Failed to determine source IP for target");
-        }
-
-        uint16_t sport = 1024 + (getpid() % 64000);
-        uint32_t seq = 1000;
-
         if (!config->quiet) {
-                printf("TCPING %s:%u\n", target_str, config->port);
+                printf("TCPING %s:%u\n", st.target_str, config->port);
         }
-
-        uint32_t sent = 0;
-        uint32_t received = 0;
-
-        struct pollfd pfd;
-        pfd.fd = net_get_fd(sock);
-        pfd.events = POLLIN;
 
         while (keep_running) {
-                if (config->count > 0 && sent >= config->count) {
+                if (config->count > 0 && st.sent >= config->count) {
                         break;
                 }
 
-                struct tcphdr tcph;
-                memset(&tcph, 0, sizeof(tcph));
-                tcph.th_sport = htons(sport);
-                tcph.th_dport = htons(config->port);
-                tcph.th_seq = htonl(seq);
-                tcph.th_ack = 0;
-                tcph.th_off = 5;
-                tcph.th_flags = TH_SYN;
-                tcph.th_win = htons(64240);
-                tcph.th_sum = 0;
-                tcph.th_urp = 0;
-
-                uint64_t csum_buf_aligned[128];
-                uint8_t *csum_buf = (uint8_t *)csum_buf_aligned;
-                size_t csum_len = 0;
-
-                if (config->family == AF_INET) {
-                        struct ipv4_pseudo_header psh;
-                        psh.src_addr =
-                            ((struct sockaddr_in *)&src_addr)->sin_addr.s_addr;
-                        psh.dst_addr =
-                            ((struct sockaddr_in *)&config->target_addr)
-                                ->sin_addr.s_addr;
-                        psh.zero = 0;
-                        psh.protocol = IPPROTO_TCP;
-                        psh.tcp_length = htons(sizeof(struct tcphdr));
-
-                        memcpy(csum_buf, &psh, sizeof(psh));
-                        csum_len += sizeof(psh);
-                } else {
-                        struct ipv6_pseudo_header psh;
-                        psh.src_addr =
-                            ((struct sockaddr_in6 *)&src_addr)->sin6_addr;
-                        psh.dst_addr =
-                            ((struct sockaddr_in6 *)&config->target_addr)
-                                ->sin6_addr;
-                        psh.tcp_length = htonl(sizeof(struct tcphdr));
-                        memset(psh.zero, 0, 3);
-                        psh.next_header = IPPROTO_TCP;
-
-                        memcpy(csum_buf, &psh, sizeof(psh));
-                        csum_len += sizeof(psh);
-                }
-
-                memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
-                csum_len += sizeof(tcph);
-
-                tcph.th_sum = net_checksum(csum_buf, csum_len);
-
+                send_tcping_probe(config, &st);
                 uint64_t send_time = get_time_ns();
-
-                if (net_send_ip_raw(sock, &tcph, sizeof(tcph),
-                                    (struct sockaddr *)&config->target_addr,
-                                    config->target_addr_len) < 0) {
-                        log_err("Failed to send TCP SYN packet");
-                }
-                sent++;
-
                 uint64_t wait_until = send_time + config->timeout_ns;
-                bool replied = false;
 
-                while (get_time_ns() < wait_until && keep_running) {
-                        int64_t timeout_ns = wait_until - get_time_ns();
-                        if (timeout_ns <= 0)
-                                break;
-                        int timeout_ms = timeout_ns / 1000000;
-
-                        int ret =
-                            poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-                        if (ret <= 0 || !(pfd.revents & POLLIN))
-                                continue;
-
-                        __attribute__((aligned(8))) uint8_t recv_buf[4096];
-                        struct sockaddr_storage from_addr;
-                        socklen_t from_addr_len = sizeof(from_addr);
-                        ssize_t n =
-                            net_recv_ip_raw(sock, recv_buf, sizeof(recv_buf),
-                                            &from_addr, &from_addr_len);
-                        if (n <= 0)
-                                continue;
-
-                        int hlen = 0;
-                        if (config->family == AF_INET) {
-                                struct ip *ip_hdr = (struct ip *)recv_buf;
-                                hlen = ip_hdr->ip_hl << 2;
-                        }
-
-                        if (n < (ssize_t)(hlen + sizeof(struct tcphdr)))
-                                continue;
-
-                        struct tcphdr *r_tcph =
-                            (struct tcphdr *)(recv_buf + hlen);
-
-                        if (r_tcph->th_dport != htons(sport) ||
-                            r_tcph->th_sport != htons(config->port)) {
-                                continue;
-                        }
-
-                        uint64_t recv_time = get_time_ns();
-                        uint64_t rtt = time_diff_ns(send_time, recv_time);
-
-                        if (!config->quiet) {
-                                char time_buf[64];
-                                format_time(rtt, NULL, time_buf,
-                                            sizeof(time_buf));
-
-                                if ((r_tcph->th_flags & TH_SYN) &&
-                                    (r_tcph->th_flags & TH_ACK)) {
-                                        printf("Reply from %s:%u (SYN-ACK) "
-                                               "time=%s\n",
-                                               target_str, config->port,
-                                               time_buf);
-                                        received++;
-                                        replied = true;
-                                        break;
-                                } else if (r_tcph->th_flags & TH_RST) {
-                                        printf(
-                                            "Reply from %s:%u (RST) time=%s\n",
-                                            target_str, config->port, time_buf);
-                                        received++;
-                                        replied = true;
-                                        break;
-                                }
-                        } else {
-                                if ((r_tcph->th_flags & TH_SYN) &&
-                                    (r_tcph->th_flags & TH_ACK)) {
-                                        received++;
-                                        replied = true;
-                                        break;
-                                } else if (r_tcph->th_flags & TH_RST) {
-                                        received++;
-                                        replied = true;
-                                        break;
-                                }
-                        }
-                }
+                bool replied =
+                    recv_tcping_reply(config, &st, wait_until, send_time);
 
                 if (!replied && !config->quiet) {
                         printf("Timeout waiting for reply from %s:%u\n",
-                               target_str, config->port);
+                               st.target_str, config->port);
                 }
 
-                seq++;
+                st.seq++;
 
                 if (keep_running &&
-                    (config->count == 0 || sent < config->count)) {
+                    (config->count == 0 || st.sent < config->count)) {
                         uint64_t current = get_time_ns();
                         uint64_t next_send_time =
                             send_time + config->interval_ns;
@@ -293,16 +333,8 @@ tcping_run(const tcping_config_t *config)
                 }
         }
 
-        net_close_raw_socket(sock);
+        net_close_raw_socket(st.sock);
+        print_tcping_stats(config, &st);
 
-        if (!config->quiet) {
-                printf("\n--- %s:%u tcping statistics ---\n", target_str,
-                       config->port);
-                printf("%u packets transmitted, %u packets received, %d%% "
-                       "packet loss\n",
-                       sent, received,
-                       sent == 0 ? 0 : ((sent - received) * 100) / sent);
-        }
-
-        return (received > 0) ? 0 : 1;
+        return (st.received > 0) ? 0 : 1;
 }
