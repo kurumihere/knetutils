@@ -9,6 +9,7 @@ INCLUDES = -I./include
 ALL_CFLAGS = $(CFLAGS) $(WARNING_FLAGS) $(STANDARD_FLAGS) $(INCLUDES)
 
 SRCS = src/core/main.c \
+       src/core/cli.c \
        src/core/net.c \
        src/core/utils.c \
        src/tools/arping/arping.c \

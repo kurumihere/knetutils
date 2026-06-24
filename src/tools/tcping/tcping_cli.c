@@ -8,23 +8,26 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "cli.h"
+
+static const cli_option_t tcping_options[] = {
+    {'4', NULL, "use IPv4"},
+    {'6', NULL, "use IPv6"},
+    {'c', "count", "stop after sending count packets"},
+    {'W', "timeout", "time to wait for a response, in seconds"},
+    {'i', "interval", "wait interval milliseconds between sending each packet"},
+    {'I', "iface/ip", "bind to a specific interface or IP address"},
+    {'q', NULL, "quiet output"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
 print_usage(const char *prog_name)
 {
-        fprintf(stderr, "Usage: %s [options] <destination> <port>\n",
-                prog_name);
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -4              use IPv4\n");
-        fprintf(stderr, "  -6              use IPv6\n");
-        fprintf(stderr, "  -c <count>      stop after sending count packets\n");
-        fprintf(stderr,
-                "  -W <timeout>    time to wait for a response, in seconds\n");
-        fprintf(stderr, "  -i <interval>   wait interval milliseconds between "
-                        "sending each packet\n");
-        fprintf(stderr, "  -I <iface/ip>   bind to a specific interface or IP "
-                        "address\n");
-        fprintf(stderr, "  -q              quiet output\n");
-        fprintf(stderr, "  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "[options] <destination> <port>",
+                         .options = tcping_options};
+        cli_print_help(&app);
 }
 
 int

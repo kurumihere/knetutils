@@ -7,25 +7,25 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "cli.h"
+
+static const cli_option_t sniff_options[] = {
+    {'I', "iface", "interface to sniff on (required)"},
+    {'c', "count", "stop after receiving count packets"},
+    {'v', NULL,
+     "increase verbosity (max level: 3, e.g. -vvv)\n-v   : show L4 headers "
+     "(TCP/UDP/ICMP)\n-vv  : show L4 headers + payload hex-dump\n-vvv : show "
+     "L4 headers + full packet hex-dump"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
 print_usage(const char *prog_name)
 {
-        fprintf(stderr, "Usage: %s [options]\n", prog_name);
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -I <iface>      interface to sniff on (required)\n");
-        fprintf(stderr,
-                "  -c <count>      stop after receiving count packets\n");
-        fprintf(
-            stderr,
-            "  -v              increase verbosity (max level: 3, e.g. -vvv)\n");
-        fprintf(stderr,
-                "                    -v   : show L4 headers (TCP/UDP/ICMP)\n");
-        fprintf(
-            stderr,
-            "                    -vv  : show L4 headers + payload hex-dump\n");
-        fprintf(stderr, "                    -vvv : show L4 headers + full "
-                        "packet hex-dump\n");
-        fprintf(stderr, "  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "[options]",
+                         .options = sniff_options};
+        cli_print_help(&app);
 }
 
 int

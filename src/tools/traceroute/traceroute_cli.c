@@ -8,27 +8,28 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "cli.h"
+
+static const cli_option_t traceroute_options[] = {
+    {'4', NULL, "use IPv4"},
+    {'6', NULL, "use IPv6"},
+    {'f', "first_ttl", "start from the given first_ttl hop"},
+    {'m', "max_ttl", "set the max number of hops (max TTL)"},
+    {'q', "nqueries", "set the number of probes per hop"},
+    {'U', NULL, "use UDP instead of ICMP ECHO"},
+    {'w', "timeout", "wait time for a response, in seconds"},
+    {'I', "iface/ip", "bind to a specific interface or IP address"},
+    {'n', NULL, "do not resolve IP addresses to their domain names"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
 print_usage(const char *prog_name)
 {
-        fprintf(stderr, "Usage: %s [options] <destination>\n", prog_name);
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -4              use IPv4\n");
-        fprintf(stderr, "  -6              use IPv6\n");
-        fprintf(stderr,
-                "  -f <first_ttl>  start from the given first_ttl hop\n");
-        fprintf(stderr,
-                "  -m <max_ttl>    set the max number of hops (max TTL)\n");
-        fprintf(stderr, "  -q <nqueries>   set the number of probes per hop\n");
-        fprintf(stderr, "  -U              use UDP instead of ICMP ECHO\n");
-        fprintf(stderr,
-                "  -w <timeout>    wait time for a response, in seconds\n");
-        fprintf(stderr, "  -I <iface/ip>   bind to a specific interface or IP "
-                        "address\n");
-        fprintf(stderr,
-                "  -n              do not resolve IP addresses to their domain "
-                "names\n");
-        fprintf(stderr, "  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "[options] <destination>",
+                         .options = traceroute_options};
+        cli_print_help(&app);
 }
 
 int

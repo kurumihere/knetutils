@@ -8,41 +8,34 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "cli.h"
+
+static const cli_option_t ping_options[] = {
+    {'c', "count", "stop after sending count echo request packets"},
+    {'w', "deadline", "specify a timeout, in seconds, before ping exits"},
+    {'W', "timeout", "time to wait for a response, in seconds"},
+    {'i', "interval", "wait interval milliseconds between sending each packet"},
+    {'u', "unit", "time unit for output (ns, μs, ms). default: auto-scaling"},
+    {'s', "size", "payload size in bytes"},
+    {'p', "pattern", "hex pattern to fill payload (up to 16 bytes)"},
+    {'Q', "tos", "quality of service / type of service"},
+    {'t', "ttl", "time to live (TTL)"},
+    {'a', NULL, "audible ping (print \\a on reply)"},
+    {'A', NULL, "adaptive ping (interval adapts to RTT)"},
+    {'f', NULL, "flood ping (prints . for send, \\b for recv)"},
+    {'I', "iface/ip", "bind to a specific interface or IP address"},
+    {'C', NULL, "cisco-style output"},
+    {'q', NULL, "quiet output"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
 print_usage(const char *prog_name)
 {
-        fprintf(stderr, "Usage: %s [options] <destination>\n", prog_name);
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -c <count>      stop after sending count "
-                        "echo request packets\n");
-        fprintf(stderr, "  -w <deadline>   specify a timeout, in seconds, "
-                        "before ping exits\n");
-        fprintf(stderr,
-                "  -W <timeout>    time to wait for a response, in seconds\n");
-        fprintf(stderr, "  -i <interval>   wait interval milliseconds between "
-                        "sending each packet\n");
-        fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
-                        "default: auto-scaling\n");
-        fprintf(stderr, "  -s <size>       payload size in bytes\n");
-        fprintf(
-            stderr,
-            "  -p <pattern>    hex pattern to fill payload (up to 16 bytes)\n");
-        fprintf(stderr,
-                "  -Q <tos>        quality of service / type of service\n");
-        fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
-        fprintf(stderr,
-                "  -a              audible ping (print \\a on reply)\n");
-        fprintf(stderr,
-                "  -A              adaptive ping (interval adapts to RTT)\n");
-        fprintf(
-            stderr,
-            "  -f              flood ping (prints . for send, \\b for recv)\n");
-        fprintf(
-            stderr,
-            "  -I <iface/ip>   bind to a specific interface or IP address\n");
-        fprintf(stderr, "  -C              cisco-style output\n");
-        fprintf(stderr, "  -q              quiet output\n");
-        fprintf(stderr, "  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "[options] <destination>",
+                         .options = ping_options};
+        cli_print_help(&app);
 }
 
 int

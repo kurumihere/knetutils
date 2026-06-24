@@ -7,40 +7,36 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "cli.h"
+
+static const cli_option_t arping_options[] = {
+    {'I', "interface", "specify network interface (e.g. eth0)"},
+    {'c', "count", "stop after sending count ARP requests"},
+    {'w', "timeout", "time to wait for reply in milliseconds (default 1000)"},
+    {'i', "interval",
+     "time to wait between requests in milliseconds (default 1000)"},
+    {'S', "source_ip", "specify source IP address (default is interface IP)"},
+    {'U', NULL, "unsolicited ARP mode (updates neighbors' ARP caches)"},
+    {'d', NULL, "duplicate address detection (DAD) mode"},
+    {'G', NULL, "use default gateway as target"},
+    {'C', NULL, "cisco style output (! for reply, . for timeout)"},
+    {'f', NULL, "quit on first reply"},
+    {'A', NULL, "send ARP reply instead of request"},
+    {'b', NULL,
+     "keep broadcasting (do not switch to unicast after first reply)"},
+    {'u', "unit", "time unit for output (ns, μs, ms). default: auto-scaling"},
+    {'q', NULL, "quiet output"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
 print_usage(const char *prog_name)
 {
-        fprintf(stderr, "Usage: %s -I interface [options] <destination>\n",
-                prog_name);
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr,
-                "  -I <interface>  specify network interface (e.g. eth0)\n");
-        fprintf(stderr,
-                "  -c <count>      stop after sending count ARP requests\n");
-        fprintf(stderr, "  -w <timeout>    time to wait for reply in "
-                        "milliseconds (default 1000)\n");
-        fprintf(stderr, "  -i <interval>   time to wait between requests in "
-                        "milliseconds (default 1000)\n");
-        fprintf(stderr, "  -S <source_ip>  specify source IP address (default "
-                        "is interface IP)\n");
-        fprintf(stderr, "  -U              unsolicited ARP mode (updates "
-                        "neighbors' ARP caches)\n");
-        fprintf(stderr,
-                "  -d              duplicate address detection (DAD) mode\n");
-        fprintf(stderr, "  -G              use default gateway as target\n");
-        fprintf(stderr, "  -C              cisco style output (! for reply, . "
-                        "for timeout)\n");
-        fprintf(stderr, "  -f              quit on first reply\n");
-        fprintf(stderr,
-                "  -A              send ARP reply instead of request\n");
-        fprintf(stderr, "  -b              keep broadcasting (do not switch to "
-                        "unicast after first reply)\n");
-        fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
-                        "default: auto-scaling\n");
-        fprintf(stderr, "  -q              quiet output\n");
-        fprintf(stderr, "  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "-I interface [options] <destination>",
+                         .options = arping_options};
+        cli_print_help(&app);
 }
-
 int
 arping_cli_main(int argc, char *argv[])
 {
