@@ -14,7 +14,7 @@ print_usage(const char *prog_name)
         fprintf(stderr, "Usage: %s [options] <destination>\n", prog_name);
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "  -c <count>      stop after sending count "
-                        "ECHO_REQUEST packets\n");
+                        "echo request packets\n");
         fprintf(
             stderr,
             "  -w <timeout>    time to wait for a response, in milliseconds\n");

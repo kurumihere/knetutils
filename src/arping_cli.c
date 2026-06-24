@@ -26,13 +26,13 @@ print_usage(const char *prog_name)
         fprintf(stderr, "  -U              unsolicited ARP mode (updates "
                         "neighbors' ARP caches)\n");
         fprintf(stderr,
-                "  -d              duplicate Address Detection (DAD) mode\n");
+                "  -d              duplicate address detection (DAD) mode\n");
         fprintf(stderr, "  -G              use default gateway as target\n");
         fprintf(stderr, "  -C              cisco style output (! for reply, . "
                         "for timeout)\n");
         fprintf(stderr, "  -f              quit on first reply\n");
         fprintf(stderr,
-                "  -A              send ARP Reply instead of Request\n");
+                "  -A              send ARP reply instead of request\n");
         fprintf(stderr, "  -b              keep broadcasting (do not switch to "
                         "unicast after first reply)\n");
         fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
