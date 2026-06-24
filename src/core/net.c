@@ -131,8 +131,9 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
                 return NULL;
         }
 
-        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        net_socket_t *sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
+                log_err("net_open_raw_socket: memory allocation failed");
                 close(fd);
                 return NULL;
         }
@@ -170,19 +171,22 @@ net_open_raw_socket(const char *iface, uint16_t protocol)
                 return NULL;
         }
 
-        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        net_socket_t *sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
+                log_err("net_open_raw_socket: memory allocation failed");
                 close(fd);
                 return NULL;
         }
         sock->fd = fd;
         sock->is_dgram = false;
         sock->bpf_buf_len = blen;
-        sock->bpf_buf = malloc(blen);
+        sock->bpf_buf = calloc(1, blen);
         sock->bpf_pos = 0;
         sock->bpf_filled = 0;
 
         if (!sock->bpf_buf) {
+                log_err("net_open_raw_socket: memory allocation failed for "
+                        "bpf_buf");
                 close(fd);
                 free(sock);
                 return NULL;
@@ -205,8 +209,9 @@ net_open_icmp_socket(int family)
                 }
                 is_dgram = true;
         }
-        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        net_socket_t *sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
+                log_err("net_open_icmp_socket: memory allocation failed");
                 close(fd);
                 return NULL;
         }
@@ -405,9 +410,11 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
         size_t len;
         if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0)
                 return false;
-        char *buf = malloc(len);
-        if (!buf)
+        char *buf = calloc(1, len);
+        if (!buf) {
+                log_err("net_get_default_gateway: memory allocation failed");
                 return false;
+        }
         if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) {
                 free(buf);
                 return false;
@@ -455,8 +462,9 @@ net_open_ip_raw_socket(int family, int protocol)
         if (fd < 0) {
                 return NULL;
         }
-        net_socket_t *sock = malloc(sizeof(net_socket_t));
+        net_socket_t *sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
+                log_err("net_open_ip_raw_socket: memory allocation failed");
                 close(fd);
                 return NULL;
         }
