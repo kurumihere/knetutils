@@ -45,22 +45,6 @@ handle_sigint(int sig)
         keep_running = false;
 }
 
-static uint16_t
-icmp_checksum(const void *b, int len)
-{
-        const uint16_t *buf = b;
-        unsigned int sum = 0;
-        uint16_t result;
-        for (sum = 0; len > 1; len -= 2)
-                sum += *buf++;
-        if (len == 1)
-                sum += *(const uint8_t *)buf;
-        sum = (sum >> 16) + (sum & 0xFFFF);
-        sum += (sum >> 16);
-        result = ~sum;
-        return result;
-}
-
 int
 ping_run(const ping_config_t *config)
 {
@@ -214,7 +198,7 @@ ping_run(const ping_config_t *config)
                                 *timestamp = get_time_ns();
                         }
                         icp->icmp_cksum = 0;
-                        icp->icmp_cksum = icmp_checksum(packet, total_len);
+                        icp->icmp_cksum = net_checksum(packet, total_len);
                 } else {
                         struct icmp6_hdr *icp = (struct icmp6_hdr *)packet;
                         icp->icmp6_type = icmp_type_req;

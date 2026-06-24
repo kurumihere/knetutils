@@ -34,22 +34,6 @@ handle_sigint(int sig)
         keep_running = false;
 }
 
-static uint16_t
-tcp_checksum(const void *b, int len)
-{
-        const uint16_t *buf = b;
-        unsigned int sum = 0;
-        uint16_t result;
-        for (sum = 0; len > 1; len -= 2)
-                sum += *buf++;
-        if (len == 1)
-                sum += *(const uint8_t *)buf;
-        sum = (sum >> 16) + (sum & 0xFFFF);
-        sum += (sum >> 16);
-        result = ~sum;
-        return result;
-}
-
 struct ipv4_pseudo_header {
         uint32_t src_addr;
         uint32_t dst_addr;
@@ -195,7 +179,7 @@ tcping_run(const tcping_config_t *config)
                 memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
                 csum_len += sizeof(tcph);
 
-                tcph.th_sum = tcp_checksum(csum_buf, csum_len);
+                tcph.th_sum = net_checksum(csum_buf, csum_len);
 
                 uint64_t send_time = get_time_ns();
 

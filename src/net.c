@@ -481,3 +481,19 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
         close(sock);
         return true;
 }
+
+uint16_t
+net_checksum(const void *b, int len)
+{
+        const uint16_t *buf = b;
+        unsigned int sum = 0;
+        uint16_t result;
+        for (sum = 0; len > 1; len -= 2)
+                sum += *buf++;
+        if (len == 1)
+                sum += *(const uint8_t *)buf;
+        sum = (sum >> 16) + (sum & 0xFFFF);
+        sum += (sum >> 16);
+        result = ~sum;
+        return result;
+}

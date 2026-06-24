@@ -44,5 +44,6 @@ net_socket_t *net_open_ip_raw_socket(int family, int protocol);
 bool
 net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
                       struct sockaddr_storage *src, socklen_t *src_len);
+uint16_t net_checksum(const void *b, int len);
 
 #endif

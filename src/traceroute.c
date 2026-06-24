@@ -25,22 +25,6 @@ handle_sigint(int sig)
         keep_running = false;
 }
 
-static uint16_t
-icmp_checksum(const void *b, int len)
-{
-        const uint16_t *buf = b;
-        unsigned int sum = 0;
-        uint16_t result;
-        for (sum = 0; len > 1; len -= 2)
-                sum += *buf++;
-        if (len == 1)
-                sum += *(const uint8_t *)buf;
-        sum = (sum >> 16) + (sum & 0xFFFF);
-        sum += (sum >> 16);
-        result = ~sum;
-        return result;
-}
-
 static bool
 is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                 uint16_t expected_seq)
@@ -215,7 +199,7 @@ traceroute_run(const traceroute_config_t *config)
                                 icp->icmp_seq = htons(seq);
                                 icp->icmp_cksum = 0;
                                 icp->icmp_cksum =
-                                    icmp_checksum(packet, header_size);
+                                    net_checksum(packet, header_size);
                         } else {
                                 struct icmp6_hdr *icp =
                                     (struct icmp6_hdr *)packet;

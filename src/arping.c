@@ -47,6 +47,13 @@ arping_run(const arping_config_t *config)
                 return -1;
         }
 
+        if (setgid(getgid()) != 0) {
+                log_warn("Failed to drop group privileges");
+        }
+        if (setuid(getuid()) != 0) {
+                log_warn("Failed to drop user privileges");
+        }
+
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
