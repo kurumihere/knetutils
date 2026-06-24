@@ -141,75 +141,68 @@ arping_run(const arping_config_t *config)
                                 break;
                         }
 
-                        if (pfd.revents & POLLIN) {
-                                uint8_t recv_buf[4096];
-                                ssize_t n = net_recv_packet(sock, recv_buf,
-                                                            sizeof(recv_buf));
-                                if (n < 0)
-                                        continue;
+                        if (!(pfd.revents & POLLIN))
+                                continue;
 
-                                if ((size_t)n < sizeof(struct ether_header) +
-                                                    sizeof(struct ether_arp)) {
-                                        continue;
-                                }
+                        uint8_t recv_buf[4096];
+                        ssize_t n =
+                            net_recv_packet(sock, recv_buf, sizeof(recv_buf));
+                        if (n < 0)
+                                continue;
 
-                                struct ether_header *r_eth =
-                                    (struct ether_header *)recv_buf;
-                                if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
-                                        continue;
-                                }
+                        if ((size_t)n < sizeof(struct ether_header) +
+                                            sizeof(struct ether_arp)) {
+                                continue;
+                        }
 
-                                struct ether_arp *r_arp =
-                                    (struct ether_arp
-                                         *)(recv_buf +
-                                            sizeof(struct ether_header));
-                                if (ntohs(r_arp->arp_op) != ARPOP_REPLY) {
-                                        continue;
-                                }
+                        struct ether_header *r_eth =
+                            (struct ether_header *)recv_buf;
+                        if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
+                                continue;
+                        }
 
-                                uint32_t reply_spa;
-                                memcpy(&reply_spa, r_arp->arp_spa, 4);
+                        struct ether_arp *r_arp =
+                            (struct ether_arp *)(recv_buf +
+                                                 sizeof(struct ether_header));
+                        if (ntohs(r_arp->arp_op) != ARPOP_REPLY) {
+                                continue;
+                        }
 
-                                if (reply_spa == config->target_ip) {
-                                        uint64_t recv_time = get_time_ns();
-                                        uint64_t rtt =
-                                            time_diff_ns(send_time, recv_time);
-                                        if (!config->quiet) {
-                                                if (config->cisco_style) {
-                                                        printf("!");
-                                                        fflush(stdout);
-                                                } else {
-                                                        char time_buf[64];
-                                                        format_time(
-                                                            rtt,
-                                                            config->time_unit,
-                                                            time_buf,
-                                                            sizeof(time_buf));
-                                                        printf("Unicast reply "
-                                                               "from %s [",
-                                                               inet_ntoa(
-                                                                   target_in));
-                                                        print_mac(
-                                                            r_arp->arp_sha);
-                                                        printf("]  %s\n",
-                                                               time_buf);
-                                                }
-                                        }
+                        uint32_t reply_spa;
+                        memcpy(&reply_spa, r_arp->arp_spa, 4);
 
-                                        if (!config->keep_broadcast) {
-                                                memcpy(current_target_mac,
-                                                       r_arp->arp_sha, 6);
-                                        }
+                        if (reply_spa != config->target_ip) {
+                                continue;
+                        }
 
-                                        received++;
-                                        got_reply = true;
-                                        if (config->dad || config->count == 1 ||
-                                            config->quit_on_reply) {
-                                                keep_running = false;
-                                        }
-                                        break;
+                        uint64_t recv_time = get_time_ns();
+                        uint64_t rtt = time_diff_ns(send_time, recv_time);
+                        if (!config->quiet) {
+                                if (config->cisco_style) {
+                                        printf("!");
+                                        fflush(stdout);
+                                } else {
+                                        char time_buf[64];
+                                        format_time(rtt, config->time_unit,
+                                                    time_buf, sizeof(time_buf));
+                                        printf("Unicast reply from %s [",
+                                               inet_ntoa(target_in));
+                                        print_mac(r_arp->arp_sha);
+                                        printf("]  %s\n", time_buf);
                                 }
                         }
+
+                        if (!config->keep_broadcast) {
+                                memcpy(current_target_mac, r_arp->arp_sha, 6);
+                        }
+
+                        received++;
+                        got_reply = true;
+                        if (config->dad || config->count == 1 ||
+                            config->quit_on_reply) {
+                                keep_running = false;
+                        }
+                        break;
                 }
 
                 if (!keep_running)
