@@ -24,6 +24,8 @@ typedef struct {
         uint8_t pattern[16];
         size_t pattern_len;
         uint64_t deadline_ns;
+        int tos;
+        bool has_tos;
 } ping_config_t;
 
 int ping_run(const ping_config_t *config);

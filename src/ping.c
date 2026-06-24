@@ -15,6 +15,27 @@
 #include <string.h>
 #include <unistd.h>
 
+static uint64_t
+integer_sqrt(uint64_t n)
+{
+        uint64_t root = 0;
+        uint64_t bit = 1ULL << 62;
+
+        while (bit > n)
+                bit >>= 2;
+
+        while (bit != 0) {
+                if (n >= root + bit) {
+                        n -= root + bit;
+                        root = (root >> 1) + bit;
+                } else {
+                        root >>= 1;
+                }
+                bit >>= 2;
+        }
+        return root;
+}
+
 static volatile bool keep_running = true;
 
 static void
@@ -93,6 +114,22 @@ ping_run(const ping_config_t *config)
                 setsockopt(net_get_fd(sock), level, optname, &ttl, sizeof(ttl));
         }
 
+        if (config->has_tos) {
+                int tos = config->tos;
+                int level =
+                    (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
+                int optname =
+                    (config->family == AF_INET6) ? IPV6_TCLASS : IP_TOS;
+                setsockopt(net_get_fd(sock), level, optname, &tos, sizeof(tos));
+        }
+
+        if (setgid(getgid()) != 0) {
+                log_warn("Failed to drop group privileges");
+        }
+        if (setuid(getuid()) != 0) {
+                log_warn("Failed to drop user privileges");
+        }
+
         char target_str[INET6_ADDRSTRLEN];
         getnameinfo((struct sockaddr *)&config->target_addr,
                     config->target_addr_len, target_str, sizeof(target_str),
@@ -130,6 +167,7 @@ ping_run(const ping_config_t *config)
         uint16_t seq = 1;
 
         uint64_t rtt_min = 0, rtt_max = 0, rtt_sum = 0;
+        uint64_t rtt_sum_us = 0, rtt_sum_squares_us = 0;
 
         struct pollfd pfd;
         pfd.fd = net_get_fd(sock);
@@ -139,6 +177,17 @@ ping_run(const ping_config_t *config)
             (config->family == AF_INET6) ? ICMP6_ECHO_REQUEST : ICMP_ECHO;
         int icmp_type_rep =
             (config->family == AF_INET6) ? ICMP6_ECHO_REPLY : ICMP_ECHOREPLY;
+
+        uint8_t *packet = calloc(1, total_len);
+        if (!packet)
+                die("Memory allocation failed");
+
+        if (config->pattern_len > 0) {
+                uint8_t *payload = packet + header_size;
+                for (size_t i = 0; i < config->payload_size; i++) {
+                        payload[i] = config->pattern[i % config->pattern_len];
+                }
+        }
 
         uint64_t ping_start_time = get_time_ns();
 
@@ -151,18 +200,6 @@ ping_run(const ping_config_t *config)
 
                 if (config->count > 0 && sent >= config->count) {
                         break;
-                }
-
-                uint8_t *packet = calloc(1, total_len);
-                if (!packet)
-                        die("Memory allocation failed");
-
-                if (config->pattern_len > 0) {
-                        uint8_t *payload = packet + header_size;
-                        for (size_t i = 0; i < config->payload_size; i++) {
-                                payload[i] =
-                                    config->pattern[i % config->pattern_len];
-                        }
                 }
 
                 if (config->family == AF_INET) {
@@ -204,7 +241,6 @@ ping_run(const ping_config_t *config)
                         log_err("Failed to send ICMP packet");
                 }
                 sent++;
-                free(packet);
 
                 uint64_t now = get_time_ns();
                 uint64_t next_send = send_time + config->interval_ns;
@@ -288,6 +324,9 @@ ping_run(const ping_config_t *config)
                                 if (rtt > rtt_max)
                                         rtt_max = rtt;
                                 rtt_sum += rtt;
+                                uint64_t rtt_us = rtt / 1000;
+                                rtt_sum_us += rtt_us;
+                                rtt_sum_squares_us += rtt_us * rtt_us;
                                 rtt_last = rtt;
 
                                 received++;
@@ -322,6 +361,9 @@ ping_run(const ping_config_t *config)
                         if (rtt > rtt_max)
                                 rtt_max = rtt;
                         rtt_sum += rtt;
+                        uint64_t rtt_us = rtt / 1000;
+                        rtt_sum_us += rtt_us;
+                        rtt_sum_squares_us += rtt_us * rtt_us;
                         rtt_last = rtt;
 
                         char src_str[INET6_ADDRSTRLEN];
@@ -433,7 +475,8 @@ ping_run(const ping_config_t *config)
                                          : ((sent - received) * 100) / sent);
 
                         if (received > 0 && config->payload_size >= 8) {
-                                char min_buf[64], avg_buf[64], max_buf[64];
+                                char min_buf[64], avg_buf[64], max_buf[64],
+                                    mdev_buf[64];
                                 format_time(rtt_min, config->time_unit, min_buf,
                                             sizeof(min_buf));
                                 format_time(rtt_sum / received,
@@ -441,11 +484,20 @@ ping_run(const ping_config_t *config)
                                             sizeof(avg_buf));
                                 format_time(rtt_max, config->time_unit, max_buf,
                                             sizeof(max_buf));
-                                printf("rtt min/avg/max = %s/%s/%s\n", min_buf,
-                                       avg_buf, max_buf);
+                                uint64_t avg_us = rtt_sum_us / received;
+                                uint64_t variance_us =
+                                    (rtt_sum_squares_us / received) -
+                                    (avg_us * avg_us);
+                                uint64_t mdev_ns =
+                                    integer_sqrt(variance_us) * 1000;
+                                format_time(mdev_ns, config->time_unit,
+                                            mdev_buf, sizeof(mdev_buf));
+                                printf("rtt min/avg/max/mdev = %s/%s/%s/%s\n",
+                                       min_buf, avg_buf, max_buf, mdev_buf);
                         }
                 }
         }
 
+        free(packet);
         return (received > 0) ? 0 : 1;
 }

@@ -27,6 +27,8 @@ print_usage(const char *prog_name)
         fprintf(
             stderr,
             "  -p <pattern>    hex pattern to fill payload (up to 16 bytes)\n");
+        fprintf(stderr,
+                "  -Q <tos>        quality of service / type of service\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
         fprintf(stderr,
                 "  -a              audible ping (print \\a on reply)\n");
@@ -58,7 +60,8 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:W:i:u:s:p:t:I:aAqChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) !=
+               -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -115,6 +118,10 @@ ping_cli_main(int argc, char *argv[])
                         }
                         break;
                 }
+                case 'Q':
+                        config.tos = (int)strtol(optarg, NULL, 0);
+                        config.has_tos = true;
+                        break;
                 case 't':
                         config.ttl = (uint8_t)atoi(optarg);
                         break;
