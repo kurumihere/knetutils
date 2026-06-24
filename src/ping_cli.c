@@ -25,6 +25,7 @@ print_usage(const char *prog_name)
         fprintf(stderr, "  -s <size>       payload size in bytes\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
         fprintf(stderr, "  -a              audible ping (print \\a on reply)\n");
+        fprintf(stderr, "  -A              adaptive ping (interval adapts to RTT)\n");
         fprintf(stderr, "  -f              flood ping (prints . for send, \\b for recv)\n");
         fprintf(
             stderr,
@@ -49,7 +50,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:aqChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:aAqChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -62,6 +63,9 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'a':
                         config.audible = true;
+                        break;
+                case 'A':
+                        config.adaptive = true;
                         break;
                 case 'f':
                         config.flood = true;

@@ -187,6 +187,7 @@ ping_run(const ping_config_t *config)
                 uint64_t wait_until =
                     config->flood ? next_send : (now + config->timeout_ns);
 
+                uint64_t rtt_last = 0;
                 bool got_reply = false;
                 bool replied = false;
                 while (get_time_ns() < wait_until && keep_running) {
@@ -255,6 +256,7 @@ ping_run(const ping_config_t *config)
                                 if (rtt > rtt_max)
                                         rtt_max = rtt;
                                 rtt_sum += rtt;
+                                rtt_last = rtt;
 
                                 received++;
                                 got_reply = true;
@@ -288,6 +290,7 @@ ping_run(const ping_config_t *config)
                         if (rtt > rtt_max)
                                 rtt_max = rtt;
                         rtt_sum += rtt;
+                        rtt_last = rtt;
 
                         char src_str[INET6_ADDRSTRLEN];
                         getnameinfo((struct sockaddr *)&src_addr, src_addr_len,
@@ -350,6 +353,16 @@ ping_run(const ping_config_t *config)
                         uint64_t current = get_time_ns();
                         uint64_t next_send_time =
                             send_time + config->interval_ns;
+
+                        if (config->adaptive) {
+                                uint64_t adaptive_interval =
+                                    rtt_last > 0 ? rtt_last
+                                                 : config->interval_ns;
+                                if (adaptive_interval < 2000000ULL) {
+                                        adaptive_interval = 2000000ULL;
+                                }
+                                next_send_time = send_time + adaptive_interval;
+                        }
 
                         if (config->flood && got_reply) {
                                 /* send immediately */
