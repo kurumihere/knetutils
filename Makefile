@@ -55,6 +55,12 @@ install: all
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/sniff
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/tcping
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/traceroute
+	install -d $(DESTDIR)$(PREFIX)/share/man/man8
+	install -m 644 man/arping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
+	install -m 644 man/ping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
+	install -m 644 man/sniff.8 $(DESTDIR)$(PREFIX)/share/man/man8/
+	install -m 644 man/tcping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
+	install -m 644 man/traceroute.8 $(DESTDIR)$(PREFIX)/share/man/man8/
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/knetutils
@@ -63,6 +69,11 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/sniff
 	rm -f $(DESTDIR)$(BINDIR)/tcping
 	rm -f $(DESTDIR)$(BINDIR)/traceroute
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/arping.8
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/ping.8
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/sniff.8
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/tcping.8
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/traceroute.8
 
 analyze: clean
 	scan-build $(MAKE) all

@@ -1,0 +1,71 @@
+.Dd June 24, 2026
+.Dt PING 8
+.Os
+.Sh NAME
+.Nm ping
+.Nd send ICMP ECHO_REQUEST packets to network hosts
+.Sh SYNOPSIS
+.Nm
+.Op Fl 46aACfhq
+.Op Fl c Ar count
+.Op Fl I Ar iface
+.Op Fl i Ar interval
+.Op Fl p Ar pattern
+.Op Fl Q Ar tos
+.Op Fl s Ar size
+.Op Fl t Ar ttl
+.Op Fl u Ar unit
+.Op Fl W Ar timeout
+.Op Fl w Ar deadline
+.Ar destination
+.Sh DESCRIPTION
+The
+.Nm
+utility uses the ICMP protocol's mandatory ECHO_REQUEST datagram to elicit an ICMP ECHO_RESPONSE from a host or gateway.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl 4
+Use IPv4 only.
+.It Fl 6
+Use IPv6 only.
+.It Fl A
+Adaptive ping. The inter-packet interval adapts to the round-trip time.
+.It Fl a
+Audible ping. Print a bell character upon receiving a reply.
+.It Fl C
+Cisco-style output.
+.It Fl c Ar count
+Stop after sending
+.Ar count
+ECHO_REQUEST packets.
+.It Fl f
+Flood ping. Prints a '.' for each sent packet and a backspace for each received packet.
+.It Fl I Ar iface
+Bind to a specific interface or source IP address.
+.It Fl i Ar interval
+Wait
+.Ar interval
+milliseconds between sending each packet.
+.It Fl p Ar pattern
+Hex pattern to fill payload (up to 16 bytes).
+.It Fl Q Ar tos
+Quality of Service / Type of Service value.
+.It Fl q
+Quiet output.
+.It Fl s Ar size
+Specify the number of data bytes to be sent. Default is 56.
+.It Fl t Ar ttl
+Set the IP Time to Live.
+.It Fl u Ar unit
+Time unit for output (ns, us, ms). Default is auto-scaling.
+.It Fl W Ar timeout
+Time to wait for a response, in seconds.
+.It Fl w Ar deadline
+Specify a timeout, in seconds, before ping exits regardless of how many packets have been sent or received.
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .

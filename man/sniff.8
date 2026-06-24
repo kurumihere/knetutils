@@ -1,0 +1,45 @@
+.Dd June 24, 2026
+.Dt SNIFF 8
+.Os
+.Sh NAME
+.Nm sniff
+.Nd minimal packet sniffer
+.Sh SYNOPSIS
+.Nm
+.Op Fl v
+.Op Fl c Ar count
+.Fl I Ar interface
+.Sh DESCRIPTION
+The
+.Nm
+utility captures and inspects L2, L3, and L4 network traffic on a specified interface. It relies solely on native
+.Dv AF_PACKET
+and BPF sockets without external dependencies.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl c Ar count
+Stop after receiving
+.Ar count
+packets.
+.It Fl I Ar interface
+Specify the network interface to sniff on. This option is required.
+.It Fl v
+Increase verbosity. Can be specified multiple times up to 3 (e.g.
+.Fl vvv ) .
+Default output displays MAC and IP layer summaries.
+Level 1
+.Pq Fl v
+shows L4 headers (TCP, UDP, ICMP).
+Level 2
+.Pq Fl vv
+shows L4 headers and a payload hex-dump.
+Level 3
+.Pq Fl vvv
+shows L4 headers and a full packet hex-dump including data link headers.
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .

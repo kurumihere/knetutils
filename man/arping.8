@@ -1,0 +1,66 @@
+.Dd June 24, 2026
+.Dt ARPING 8
+.Os
+.Sh NAME
+.Nm arping
+.Nd send ARP requests to a neighbor host
+.Sh SYNOPSIS
+.Nm
+.Op Fl c Ar count
+.Op Fl w Ar timeout
+.Op Fl i Ar interval
+.Op Fl S Ar source_ip
+.Op Fl U
+.Op Fl d
+.Op Fl G
+.Op Fl C
+.Op Fl f
+.Op Fl A
+.Op Fl b
+.Op Fl u Ar unit
+.Op Fl q
+.Fl I Ar interface
+.Ar destination
+.Sh DESCRIPTION
+The
+.Nm
+utility sends ARP and/or RARP requests to discover and probe hosts on the local network link.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl A
+Send ARP replies instead of requests.
+.It Fl b
+Keep broadcasting (do not switch to unicast after first reply).
+.It Fl C
+Cisco-style output. Prints '!' for a reply and '.' for a timeout.
+.It Fl c Ar count
+Stop after sending
+.Ar count
+ARP requests.
+.It Fl d
+Duplicate address detection (DAD) mode.
+.It Fl f
+Quit on first reply.
+.It Fl G
+Use default gateway as target.
+.It Fl I Ar interface
+Specify network interface to use. This option is required.
+.It Fl i Ar interval
+Time to wait between requests in milliseconds (default 1000).
+.It Fl q
+Quiet output.
+.It Fl S Ar source_ip
+Specify source IP address. Defaults to interface IP.
+.It Fl U
+Unsolicited ARP mode (updates neighbors' ARP caches).
+.It Fl u Ar unit
+Time unit for output (ns, us, ms). Default is auto-scaling.
+.It Fl w Ar timeout
+Time to wait for reply in milliseconds (default 1000).
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .

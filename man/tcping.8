@@ -1,0 +1,45 @@
+.Dd June 24, 2026
+.Dt TCPING 8
+.Os
+.Sh NAME
+.Nm tcping
+.Nd measure TCP connection latency
+.Sh SYNOPSIS
+.Nm
+.Op Fl 46q
+.Op Fl c Ar count
+.Op Fl I Ar iface
+.Op Fl i Ar interval
+.Op Fl W Ar timeout
+.Ar destination port
+.Sh DESCRIPTION
+The
+.Nm
+utility establishes TCP connections to a target port to measure latency and test if a specific port is open, avoiding ICMP blocks.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl 4
+Use IPv4 only.
+.It Fl 6
+Use IPv6 only.
+.It Fl c Ar count
+Stop after sending
+.Ar count
+connection attempts.
+.It Fl I Ar iface
+Bind to a specific interface or source IP address.
+.It Fl i Ar interval
+Wait
+.Ar interval
+milliseconds between each attempt.
+.It Fl q
+Quiet output.
+.It Fl W Ar timeout
+Time to wait for a response, in seconds.
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .

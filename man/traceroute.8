@@ -1,0 +1,50 @@
+.Dd June 24, 2026
+.Dt TRACEROUTE 8
+.Os
+.Sh NAME
+.Nm traceroute
+.Nd print the route packets take to network host
+.Sh SYNOPSIS
+.Nm
+.Op Fl 46Un
+.Op Fl f Ar first_ttl
+.Op Fl I Ar iface
+.Op Fl m Ar max_ttl
+.Op Fl q Ar nqueries
+.Op Fl w Ar timeout
+.Ar destination
+.Sh DESCRIPTION
+The
+.Nm
+utility tracks the route packets taken from an IP network on their way to a given host. It utilizes the IP protocol's time to live (TTL) field and attempts to elicit an ICMP TIME_EXCEEDED response from each gateway along the path.
+.Pp
+By default, it uses ICMP ECHO requests.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl 4
+Use IPv4 only.
+.It Fl 6
+Use IPv6 only.
+.It Fl f Ar first_ttl
+Start from the given
+.Ar first_ttl
+hop. Default is 1.
+.It Fl I Ar iface
+Bind to a specific interface or source IP address.
+.It Fl m Ar max_ttl
+Set the maximum number of hops (max TTL). Default is 30.
+.It Fl n
+Do not resolve IP addresses to their domain names.
+.It Fl q Ar nqueries
+Set the number of probes per hop. Default is 3.
+.It Fl U
+Use UDP datagrams instead of ICMP ECHO requests.
+.It Fl w Ar timeout
+Wait time for a response, in seconds.
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .
