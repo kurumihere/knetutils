@@ -23,10 +23,17 @@ print_usage(const char *prog_name)
         fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
                         "default: auto-scaling\n");
         fprintf(stderr, "  -s <size>       payload size in bytes\n");
+        fprintf(
+            stderr,
+            "  -p <pattern>    hex pattern to fill payload (up to 16 bytes)\n");
         fprintf(stderr, "  -t <ttl>        time to live (TTL)\n");
-        fprintf(stderr, "  -a              audible ping (print \\a on reply)\n");
-        fprintf(stderr, "  -A              adaptive ping (interval adapts to RTT)\n");
-        fprintf(stderr, "  -f              flood ping (prints . for send, \\b for recv)\n");
+        fprintf(stderr,
+                "  -a              audible ping (print \\a on reply)\n");
+        fprintf(stderr,
+                "  -A              adaptive ping (interval adapts to RTT)\n");
+        fprintf(
+            stderr,
+            "  -f              flood ping (prints . for send, \\b for recv)\n");
         fprintf(
             stderr,
             "  -I <iface/ip>   bind to a specific interface or IP address\n");
@@ -50,7 +57,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:t:I:aAqChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:i:u:s:p:t:I:aAqChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -90,6 +97,18 @@ ping_cli_main(int argc, char *argv[])
                 case 's':
                         config.payload_size = (uint32_t)atoi(optarg);
                         break;
+                case 'p': {
+                        size_t len = strlen(optarg);
+                        if (len > 32)
+                                len = 32;
+                        config.pattern_len = len / 2;
+                        for (size_t i = 0; i < config.pattern_len; i++) {
+                                unsigned int byte;
+                                sscanf(optarg + i * 2, "%2x", &byte);
+                                config.pattern[i] = (uint8_t)byte;
+                        }
+                        break;
+                }
                 case 't':
                         config.ttl = (uint8_t)atoi(optarg);
                         break;

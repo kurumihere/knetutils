@@ -113,6 +113,14 @@ ping_run(const ping_config_t *config)
                 } else {
                         printf("PING %s: %u data bytes\n", target_str,
                                config->payload_size);
+                        if (config->pattern_len > 0) {
+                                printf("PATTERN: 0x");
+                                for (size_t i = 0; i < config->pattern_len;
+                                     i++) {
+                                        printf("%02x", config->pattern[i]);
+                                }
+                                printf("\n");
+                        }
                 }
         }
 
@@ -140,6 +148,14 @@ ping_run(const ping_config_t *config)
                 uint8_t *packet = calloc(1, total_len);
                 if (!packet)
                         die("Memory allocation failed");
+
+                if (config->pattern_len > 0) {
+                        uint8_t *payload = packet + header_size;
+                        for (size_t i = 0; i < config->payload_size; i++) {
+                                payload[i] =
+                                    config->pattern[i % config->pattern_len];
+                        }
+                }
 
                 if (config->family == AF_INET) {
                         struct icmp *icp = (struct icmp *)packet;
