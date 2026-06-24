@@ -140,7 +140,15 @@ ping_run(const ping_config_t *config)
         int icmp_type_rep =
             (config->family == AF_INET6) ? ICMP6_ECHO_REPLY : ICMP_ECHOREPLY;
 
+        uint64_t ping_start_time = get_time_ns();
+
         while (keep_running) {
+                uint64_t loop_now = get_time_ns();
+                if (config->deadline_ns > 0 &&
+                    loop_now - ping_start_time >= config->deadline_ns) {
+                        break;
+                }
+
                 if (config->count > 0 && sent >= config->count) {
                         break;
                 }
@@ -202,6 +210,14 @@ ping_run(const ping_config_t *config)
                 uint64_t next_send = send_time + config->interval_ns;
                 uint64_t wait_until =
                     config->flood ? next_send : (now + config->timeout_ns);
+
+                if (config->deadline_ns > 0) {
+                        uint64_t deadline_end =
+                            ping_start_time + config->deadline_ns;
+                        if (wait_until > deadline_end) {
+                                wait_until = deadline_end;
+                        }
+                }
 
                 uint64_t rtt_last = 0;
                 bool got_reply = false;

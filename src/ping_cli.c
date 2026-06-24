@@ -15,9 +15,10 @@ print_usage(const char *prog_name)
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "  -c <count>      stop after sending count "
                         "echo request packets\n");
-        fprintf(
-            stderr,
-            "  -w <timeout>    time to wait for a response, in milliseconds\n");
+        fprintf(stderr, "  -w <deadline>   specify a timeout, in seconds, "
+                        "before ping exits\n");
+        fprintf(stderr,
+                "  -W <timeout>    time to wait for a response, in seconds\n");
         fprintf(stderr, "  -i <interval>   wait interval milliseconds between "
                         "sending each packet\n");
         fprintf(stderr, "  -u <unit>       time unit for output (ns, μs, ms). "
@@ -57,7 +58,7 @@ ping_cli_main(int argc, char *argv[])
         config.family = AF_UNSPEC;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46c:w:i:u:s:p:t:I:aAqChf")) != -1) {
+        while ((opt = getopt(argc, argv, "46c:w:W:i:u:s:p:t:I:aAqChf")) != -1) {
                 switch (opt) {
                 case '4':
                         config.family = AF_INET;
@@ -85,7 +86,12 @@ ping_cli_main(int argc, char *argv[])
                         config.count = (uint32_t)atoi(optarg);
                         break;
                 case 'w':
-                        config.timeout_ns = (uint64_t)atoi(optarg) * 1000000ULL;
+                        config.deadline_ns =
+                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        break;
+                case 'W':
+                        config.timeout_ns =
+                            (uint64_t)atoi(optarg) * 1000000000ULL;
                         break;
                 case 'i':
                         config.interval_ns =
