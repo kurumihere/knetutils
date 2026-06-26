@@ -9,7 +9,13 @@ TOOLS=("arping" "ping" "sniff" "tcping" "traceroute")
 
 for tool in "${TOOLS[@]}"; do
     echo "Testing $tool help menu..."
-    ./bin/$tool -h > /dev/null 2>&1 || { echo "$tool failed"; exit 1; }
+    ./bin/$tool -h > /dev/null 2>&1 || { echo "$tool -h failed"; exit 1; }
+    
+    echo "Testing $tool without arguments..."
+    if ./bin/$tool > /dev/null 2>&1; then
+        echo "$tool unexpectedly succeeded without arguments"
+        exit 1
+    fi
 done
 
 echo "Basic tests passed! (No segmentation faults during help execution)"

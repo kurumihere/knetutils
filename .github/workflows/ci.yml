@@ -26,8 +26,4 @@ jobs:
         clang-format --dry-run --Werror src/core/*.c src/tools/*/*.c include/*.h
 
     - name: Test CLI Interfaces
-      run: |
-        ./bin/knetutils ping -h || true
-        ./bin/knetutils arping -h || true
-        ./bin/knetutils tcping -h || true
-        ./bin/knetutils traceroute -h || true
+      run: bash tests/test_basic.sh
