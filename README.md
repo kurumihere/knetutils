@@ -8,20 +8,16 @@ Designed with zero external library dependencies (relying only on standard libc 
 The suite is compiled into a single **Multicall binary**, allowing all utilities to share common core network and 
 CLI parsing routines while maintaining a tiny footprint.
 
----
-
 ## Utilities Included
 
-| Utility | Description | Key Features | Privileges |
-| :--- | :--- | :--- | :--- |
-| *`arping`* | Discover and probe hosts on a local network using ARP. | Duplicate Address Detection (DAD), unsolicited ARP updates, unit scaling | Root required |
-| *`ping`* | Diagnose network reachability and RTT latency using ICMP. | Adaptive ping, flood ping, custom payload patterns, TTL/TOS tuning | Root required |
-| *`pscan`* | Fast asynchronous port scanner. | Non-blocking TCP SYN / UDP scans, rate-limiting, OS fingerprinting, JSON output | Root required |
-| *`sniff`* | Low-overhead network packet capture utility. | Multiple verbosity levels (headers/payload hex-dump), PCAP file output | Root required |
-| *`tcping`* | Measure network latency using TCP connection establishment. | Latency to specific TCP ports, custom timeout and interval settings | None (standard TCP) |
-| *`traceroute`* | Trace the route and hop latency to a network host. | ICMP Echo or UDP probes, domain name resolution, custom max/first TTL | Root required |
-
----
+| Utility | Description | Key Features |
+| :--- | :--- | :--- |
+| *`arping`* | Discover and probe hosts on a local network using ARP. | Duplicate Address Detection (DAD), unsolicited ARP updates, unit scaling |
+| *`ping`* | Diagnose network reachability and RTT latency using ICMP. | Adaptive ping, flood ping, custom payload patterns, TTL/TOS tuning |
+| *`pscan`* | Fast asynchronous port scanner. | Non-blocking TCP SYN / UDP scans, rate-limiting, OS fingerprinting, JSON output |
+| *`sniff`* | Low-overhead network packet capture utility. | Multiple verbosity levels (headers/payload hex-dump), PCAP file output |
+| *`tcping`* | Measure network latency using TCP connection establishment. | Latency to specific TCP ports, custom timeout and interval settings |
+| *`traceroute`* | Trace the route and hop latency to a network host. | ICMP Echo or UDP probes, domain name resolution, custom max/first TTL |
 
 ## Build & Installation
 
@@ -62,7 +58,7 @@ make install
 By default, this installs to `/usr/local/bin` and `/usr/local/share/man/man8/`. You can customize the install prefix using:
 
 ```bash
-make PREFIX=/usr install
+make PREFIX=<your-prefix> install
 ```
 
 ### 4. Uninstall
@@ -73,8 +69,6 @@ To clean system-wide installation files:
 make uninstall
 ```
 
----
-
 ## Command Usage & Examples
 
 You can run any utility in two ways:
@@ -82,7 +76,7 @@ You can run any utility in two ways:
 2. **Via the dispatcher**: `./bin/knetutils ping 1.1.1.1`
 
 > [!IMPORTANT]
-> Because utilities like `ping`, `arping`, `pscan` (SYN scan), `sniff`, and `traceroute` craft or capture raw packets, they require root privileges (e.g., prefixing with `sudo`).
+> Because utilities like `ping`, `arping`, `pscan` (SYN scan), `sniff`, and `traceroute` craft or capture raw packets, they require root privileges.
 
 ### `arping`
 Discover hosts on a local network interface using ARP requests.
@@ -144,8 +138,6 @@ sudo traceroute 8.8.8.8
 sudo traceroute -U -n 1.1.1.1
 ```
 
----
-
 ## Development
 
 The project includes standard rules to help contributors format, lint, and analyze the code:
@@ -162,8 +154,6 @@ The project includes standard rules to help contributors format, lint, and analy
   ```bash
   make analyze
   ```
-
----
 
 ## License
 
