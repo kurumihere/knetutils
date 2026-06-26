@@ -4,10 +4,15 @@
 #include <string.h>
 #include <time.h>
 
+#define NS_PER_S 1000000000ULL
+#define NS_PER_MS 1000000ULL
+#define NS_PER_US 1000ULL
+
 void
 log_err(const char *fmt, ...)
 {
         va_list args;
+
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
@@ -19,6 +24,7 @@ void
 log_warn(const char *fmt, ...)
 {
         va_list args;
+
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
@@ -30,6 +36,7 @@ void
 log_info(const char *fmt, ...)
 {
         va_list args;
+
         va_start(args, fmt);
         fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
         vfprintf(stdout, fmt, args);
@@ -41,6 +48,7 @@ void
 die(const char *fmt, ...)
 {
         va_list args;
+
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
@@ -56,7 +64,7 @@ get_time_ns(void)
         if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
                 die("clock_gettime failed");
         }
-        return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+        return (uint64_t)ts.tv_sec * NS_PER_S + (uint64_t)ts.tv_nsec;
 }
 
 uint64_t
@@ -79,21 +87,23 @@ format_time(uint64_t time_ns, const char *unit_choice, char *buf,
                 } else if (strcmp(unit_choice, "us") == 0 ||
                            strcmp(unit_choice, "μs") == 0) {
                         snprintf(buf, buf_size, "%.3f μs",
-                                 (double)time_ns / 1000.0);
+                                 (double)time_ns / (double)NS_PER_US);
                         return buf;
                 } else if (strcmp(unit_choice, "ms") == 0) {
                         snprintf(buf, buf_size, "%.3f ms",
-                                 (double)time_ns / 1000000.0);
+                                 (double)time_ns / (double)NS_PER_MS);
                         return buf;
                 }
         }
 
-        if (time_ns < 1000) {
+        if (time_ns < NS_PER_US) {
                 snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
-        } else if (time_ns < 1000000) {
-                snprintf(buf, buf_size, "%.3f μs", (double)time_ns / 1000.0);
+        } else if (time_ns < NS_PER_MS) {
+                snprintf(buf, buf_size, "%.3f μs",
+                         (double)time_ns / (double)NS_PER_US);
         } else {
-                snprintf(buf, buf_size, "%.3f ms", (double)time_ns / 1000000.0);
+                snprintf(buf, buf_size, "%.3f ms",
+                         (double)time_ns / (double)NS_PER_MS);
         }
         return buf;
 }

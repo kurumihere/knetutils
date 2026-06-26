@@ -46,30 +46,35 @@ bool
 net_get_iface_mac(const char *iface, uint8_t *mac)
 {
 #ifdef __linux__
-        int sock = socket(AF_INET, SOCK_DGRAM, 0);
+        int sock;
+        struct ifreq ifr;
+
+        sock = socket(AF_INET, SOCK_DGRAM, 0);
         if (sock < 0)
                 return false;
-        struct ifreq ifr;
+
         memset(&ifr, 0, sizeof(ifr));
         strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
         if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
                 close(sock);
                 return false;
         }
-        memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+        memcpy(mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
         close(sock);
         return true;
 #else
         struct ifaddrs *ifap, *ifa;
+        bool found = false;
+
         if (getifaddrs(&ifap) != 0)
                 return false;
-        bool found = false;
+
         for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
                 if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_LINK &&
                     strcmp(ifa->ifa_name, iface) == 0) {
                         struct sockaddr_dl *sdl =
                             (struct sockaddr_dl *)ifa->ifa_addr;
-                        memcpy(mac, LLADDR(sdl), 6);
+                        memcpy(mac, LLADDR(sdl), ETH_ALEN);
                         found = true;
                         break;
                 }
@@ -83,9 +88,11 @@ bool
 net_get_iface_ip(const char *iface, uint32_t *ip)
 {
         struct ifaddrs *ifap, *ifa;
+        bool found = false;
+
         if (getifaddrs(&ifap) != 0)
                 return false;
-        bool found = false;
+
         for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
                 if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET &&
                     strcmp(ifa->ifa_name, iface) == 0) {

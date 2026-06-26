@@ -45,10 +45,13 @@ print_main_usage(void)
 int
 main(int argc, char *argv[])
 {
+        const char *prog_name;
+        const char *cmd;
+
         if (argc < 1)
                 return EXIT_FAILURE;
 
-        const char *prog_name = get_basename(argv[0]);
+        prog_name = get_basename(argv[0]);
 
         if (strcmp(prog_name, "arping") == 0) {
                 return arping_cli_main(argc, argv);
@@ -69,7 +72,7 @@ main(int argc, char *argv[])
                 return EXIT_FAILURE;
         }
 
-        const char *cmd = argv[1];
+        cmd = argv[1];
         if (strcmp(cmd, "arping") == 0) {
                 return arping_cli_main(argc - 1, argv + 1);
         } else if (strcmp(cmd, "ping") == 0) {
