@@ -11,6 +11,7 @@ static const cli_option_t pscan_options[] = {
     {'4', NULL, "use IPv4"},
     {'6', NULL, "use IPv6"},
     {'p', "ports", "port range to scan (e.g. 1-1024 or 80)"},
+    {'r', "rate", "max packets per second (rate limit)"},
     {'u', NULL, "use UDP scan instead of TCP SYN"},
     {'W', "timeout", "time to wait for a response, in seconds"},
     {'I', "iface/ip", "bind to a specific interface or IP address"},
@@ -38,7 +39,9 @@ pscan_cli_main(int argc, char **argv)
         config.end_port = 1024;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46p:W:I:uh")) != -1) {
+        const char *target_ip_str;
+
+        while ((opt = getopt(argc, argv, "46p:r:W:I:uh")) != -1) {
                 switch (opt) {
                 case 'u':
                         config.udp = true;
@@ -66,8 +69,10 @@ pscan_cli_main(int argc, char **argv)
                         break;
                 }
                 case 'W':
-                        config.timeout_ns =
-                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_S;
+                        break;
+                case 'r':
+                        config.rate_limit = (uint32_t)atoi(optarg);
                         break;
                 case 'I':
                         config.bind_iface = optarg;
@@ -87,7 +92,7 @@ pscan_cli_main(int argc, char **argv)
                 return EXIT_FAILURE;
         }
 
-        const char *target_ip_str = argv[optind];
+        target_ip_str = argv[optind];
 
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {

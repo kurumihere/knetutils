@@ -4,10 +4,6 @@
 #include <string.h>
 #include <time.h>
 
-#define NS_PER_S 1000000000ULL
-#define NS_PER_MS 1000000ULL
-#define NS_PER_US 1000ULL
-
 void
 log_err(const char *fmt, ...)
 {

@@ -257,6 +257,12 @@ int
 pscan_run(const pscan_config_t *config)
 {
         pscan_state_t st;
+        uint64_t last_time;
+        double tokens = 1.0;
+        double burst = 10.0;
+        uint16_t port;
+        uint64_t start_wait;
+
         init_pscan_state(config, &st);
 
         if (config->udp) {
@@ -299,17 +305,42 @@ pscan_run(const pscan_config_t *config)
 #endif
         }
 
-        log_info("Scanning %s ports %u to %u...", st.target_str,
-                 config->start_port, config->end_port);
+        log_info("Scanning %s ports %u to %u (rate: %u pps)...", st.target_str,
+                 config->start_port, config->end_port, config->rate_limit);
 
-        for (uint16_t port = config->start_port; port <= config->end_port;
-             port++) {
+        last_time = get_time_ns();
+
+        for (port = config->start_port; port <= config->end_port; port++) {
+                if (config->rate_limit > 0) {
+                        while (tokens < 1.0) {
+                                uint64_t now = get_time_ns();
+                                uint64_t delta_ns = now - last_time;
+                                last_time = now;
+
+                                tokens += (double)delta_ns *
+                                          (double)config->rate_limit /
+                                          (double)NS_PER_S;
+                                if (tokens > burst) {
+                                        tokens = burst;
+                                }
+
+                                if (tokens < 1.0) {
+                                        drain_packets(config, &st);
+                                        usleep(1000);
+                                }
+                        }
+                        tokens -= 1.0;
+                }
+
                 send_probe(config, &st, port);
                 drain_packets(config, &st);
-                usleep(100);
+
+                if (config->rate_limit == 0) {
+                        usleep(100);
+                }
         }
 
-        uint64_t start_wait = get_time_ns();
+        start_wait = get_time_ns();
         while (get_time_ns() - start_wait < config->timeout_ns) {
                 struct pollfd pfd = {net_get_fd(st.sock), POLLIN, 0};
                 if (poll(&pfd, 1, 100) > 0) {
@@ -318,8 +349,8 @@ pscan_run(const pscan_config_t *config)
         }
 
         if (config->udp) {
-                for (uint16_t port = config->start_port;
-                     port <= config->end_port; port++) {
+                for (port = config->start_port; port <= config->end_port;
+                     port++) {
                         if (!st.closed_ports[port]) {
                                 printf(COLOR_BOLD COLOR_YELLOW
                                        "Port %u is open|filtered" COLOR_RESET

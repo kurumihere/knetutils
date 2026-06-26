@@ -14,6 +14,10 @@
 #define COLOR_CYAN "\x1b[36m"
 #define COLOR_BOLD "\x1b[1m"
 
+#define NS_PER_S 1000000000ULL
+#define NS_PER_MS 1000000ULL
+#define NS_PER_US 1000ULL
+
 void log_err(const char *fmt, ...);
 void log_warn(const char *fmt, ...);
 void log_info(const char *fmt, ...);
