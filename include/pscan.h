@@ -17,6 +17,7 @@ typedef struct {
         bool udp;
         bool randomize;
         bool json_output;
+        bool banner_grab;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);
