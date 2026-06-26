@@ -4,26 +4,20 @@ BINDIR ?= $(PREFIX)/bin
 
 WARNING_FLAGS = -Wall -Wextra -pedantic -Werror -Wdeclaration-after-statement
 STANDARD_FLAGS = -std=c11 -D_GNU_SOURCE
-INCLUDES = -I./include
+INCLUDES = -I./src
 
 ALL_CFLAGS = $(CFLAGS) $(WARNING_FLAGS) $(STANDARD_FLAGS) $(INCLUDES)
 
-SRCS = src/core/main.c \
-       src/core/cli.c \
-       src/core/net.c \
-       src/core/utils.c \
-       src/tools/arping/arping.c \
-       src/tools/arping/arping_cli.c \
-       src/tools/ping/ping.c \
-       src/tools/ping/ping_cli.c \
-       src/tools/sniff/sniff.c \
-       src/tools/sniff/sniff_cli.c \
-       src/tools/tcping/tcping.c \
-       src/tools/tcping/tcping_cli.c \
-       src/tools/traceroute/traceroute.c \
-       src/tools/traceroute/traceroute_cli.c \
-       src/tools/pscan/pscan.c \
-       src/tools/pscan/pscan_cli.c
+SRCS = src/main.c \
+       src/cli.c \
+       src/net.c \
+       src/utils.c \
+       src/arping.c \
+       src/ping.c \
+       src/sniff.c \
+       src/tcping.c \
+       src/traceroute.c \
+       src/pscan.c
 
 OBJS = $(SRCS:.c=.o)
 
@@ -87,10 +81,10 @@ analyze: clean
 	scan-build $(MAKE) all
 
 format:
-	clang-format -i $(SRCS) include/*.h
+	clang-format -i $(SRCS) src/*.h
 
 lint:
-	clang-tidy $(SRCS) include/*.h -- $(INCLUDES) $(STANDARD_FLAGS)
+	clang-tidy $(SRCS) src/*.h -- $(INCLUDES) $(STANDARD_FLAGS)
 
 test: all
 	@echo "Running basic tests..."

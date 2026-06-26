@@ -34,7 +34,7 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "cli.h"
+#include "knetutils.h"
 #include <stdio.h>
 #include <string.h>
 

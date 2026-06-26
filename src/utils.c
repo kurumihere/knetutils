@@ -1,5 +1,5 @@
 /***************************************************************************
- * sniff_cli.c -- CLI wrapper for the sniff utility                        *
+ * utils.c -- Shared utility functions (time, logging, formatting)         *
  *                                                                         *
  ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
  *                                                                         *
@@ -34,87 +34,112 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "sniff.h"
-#include "utils.h"
-
-#include <getopt.h>
+#include "knetutils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <time.h>
 
-#include "cli.h"
-
-static const cli_option_t sniff_options[] = {
-    {'I', "iface", "interface to sniff on (required)"},
-    {'c', "count", "stop after receiving count packets"},
-    {'w', "file", "write packets to a PCAP file"},
-    {'v', NULL,
-     "increase verbosity (max level: 3, e.g. -vvv)\n-v   : show L4 headers "
-     "(TCP/UDP/ICMP)\n-vv  : show L4 headers + payload hex-dump\n-vvv : show "
-     "L4 headers + full packet hex-dump"},
-    {'h', NULL, "print help and exit"},
-    {0, NULL, NULL}};
-
-static void
-print_usage(const char *prog_name)
+void
+log_err(const char *fmt, ...)
 {
-    cli_app_t app = {.prog_name = prog_name,
-                     .usage_args = "[options]",
-                     .options = sniff_options};
+    va_list args;
 
-    cli_print_help(&app);
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
-int
-sniff_cli_main(int c, char **av)
+void
+log_warn(const char *fmt, ...)
 {
-    sniff_config_t config;
-    int ch;
-    const char *prog_name;
-    int ret = EXIT_SUCCESS;
+    va_list args;
 
-    prog_name = *av;
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}
 
-    memset(&config, 0, sizeof(config));
+void
+log_info(const char *fmt, ...)
+{
+    va_list args;
 
-    while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
-        switch (ch) {
-        case 'I':
-            config.iface = optarg;
-            break;
-        case 'c':
-            config.max_packets = atoi(optarg);
-            break;
-        case 'w':
+    va_start(args, fmt);
+    fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
+    vfprintf(stdout, fmt, args);
+    fprintf(stdout, "\n");
+    va_end(args);
+}
 
-            config.pcap_file = optarg;
-            break;
-        case 'v':
-            config.verbosity++;
-            break;
-        case 'h':
-            print_usage(prog_name);
-            goto out;
-        default:
-            print_usage(prog_name);
-            ret = EXIT_FAILURE;
-            goto out;
+void
+die(const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+
+    exit(EXIT_FAILURE);
+}
+
+u_int64_t
+get_time_ns(void)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        die("clock_gettime failed");
+    }
+
+    return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
+}
+
+u_int64_t
+time_diff_ns(u_int64_t start, u_int64_t end)
+{
+
+    if (end < start) {
+        return 0;
+    }
+    return end - start;
+}
+
+const char *
+format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
+            size_t buf_size)
+{
+    if (unit_choice) {
+        if (strcmp(unit_choice, "ns") == 0) {
+
+            snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+            return buf;
+        } else if (strcmp(unit_choice, "us") == 0 ||
+                   strcmp(unit_choice, "μs") == 0) {
+            snprintf(buf, buf_size, "%.3f μs",
+                     (double)time_ns / (double)NS_PER_US);
+            return buf;
+        } else if (strcmp(unit_choice, "ms") == 0) {
+            snprintf(buf, buf_size, "%.3f ms",
+                     (double)time_ns / (double)NS_PER_MS);
+            return buf;
         }
     }
 
-    if (!config.iface) {
-        log_err("Interface is required (-I)");
-        print_usage(prog_name);
-        ret = EXIT_FAILURE;
-        goto out;
+    if (time_ns < NS_PER_US) {
+        snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+    } else if (time_ns < NS_PER_MS) {
+        snprintf(buf, buf_size, "%.3f μs", (double)time_ns / (double)NS_PER_US);
+    } else {
+        snprintf(buf, buf_size, "%.3f ms", (double)time_ns / (double)NS_PER_MS);
     }
 
-    if (getuid() != 0) {
-        log_warn("sniff requires root privileges to open raw sockets.");
-    }
-
-    ret = sniff_run(&config);
-out:
-    return ret;
+    return buf;
 }

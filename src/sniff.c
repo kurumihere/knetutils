@@ -34,9 +34,7 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "sniff.h"
-#include "net.h"
-#include "utils.h"
+#include "knetutils.h"
 
 #include <arpa/inet.h>
 #include <net/ethernet.h>
@@ -382,7 +380,7 @@ process_packet(const sniff_config_t *config, const u_char *buf, ssize_t n)
     }
 }
 
-int
+static int
 sniff_run(const sniff_config_t *config)
 {
     struct sigaction sa;
@@ -471,6 +469,80 @@ sniff_run(const sniff_config_t *config)
     printf("\n");
     log_info("Captured %d packets", st.packets_captured);
 
+out:
+    return ret;
+}
+
+static const cli_option_t sniff_options[] = {
+    {'I', "iface", "interface to sniff on (required)"},
+    {'c', "count", "stop after receiving count packets"},
+    {'w', "file", "write packets to a PCAP file"},
+    {'v', NULL,
+     "increase verbosity (max level: 3, e.g. -vvv)\n-v   : show L4 headers "
+     "(TCP/UDP/ICMP)\n-vv  : show L4 headers + payload hex-dump\n-vvv : show "
+     "L4 headers + full packet hex-dump"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
+static void
+print_usage(const char *prog_name)
+{
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options]",
+                     .options = sniff_options};
+
+    cli_print_help(&app);
+}
+
+int
+sniff_main(int c, char **av)
+{
+    sniff_config_t config;
+    int ch;
+    const char *prog_name;
+    int ret = EXIT_SUCCESS;
+
+    prog_name = *av;
+
+    memset(&config, 0, sizeof(config));
+
+    while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
+        switch (ch) {
+        case 'I':
+            config.iface = optarg;
+            break;
+        case 'c':
+            config.max_packets = atoi(optarg);
+            break;
+        case 'w':
+
+            config.pcap_file = optarg;
+            break;
+        case 'v':
+            config.verbosity++;
+            break;
+        case 'h':
+            print_usage(prog_name);
+            goto out;
+        default:
+            print_usage(prog_name);
+            ret = EXIT_FAILURE;
+            goto out;
+        }
+    }
+
+    if (!config.iface) {
+        log_err("Interface is required (-I)");
+        print_usage(prog_name);
+        ret = EXIT_FAILURE;
+        goto out;
+    }
+
+    if (getuid() != 0) {
+        log_warn("sniff requires root privileges to open raw sockets.");
+    }
+
+    ret = sniff_run(&config);
 out:
     return ret;
 }
