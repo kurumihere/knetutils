@@ -100,23 +100,25 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
         struct ip *ip_hdr;
         int hlen;
         struct icmp *icp;
+        bool ret_val = false;
 
         if (len < (ssize_t)sizeof(struct ip)) {
-                return false;
+                goto out;
         }
 
         ip_hdr = (struct ip *)buf;
         hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
 
         if (len < (ssize_t)(hlen + sizeof(struct icmp))) {
-                return false;
+                goto out;
         }
 
         icp = (struct icmp *)(buf + hlen);
 
         if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
-                return icp->icmp_id == expected_id &&
-                       icp->icmp_seq == expected_seq;
+                ret_val = (icp->icmp_id == expected_id &&
+                           icp->icmp_seq == expected_seq);
+                goto out;
         }
 
         if (icp->icmp_type == ICMP_TIMXCEED || icp->icmp_type == ICMP_UNREACH) {
@@ -125,7 +127,7 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
 
                 if (len < (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
                                     sizeof(struct ip))) {
-                        return false;
+                        goto out;
                 }
 
                 inner_ip = (struct ip *)icp->icmp_data;
@@ -138,13 +140,14 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                         if (len <
                             (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
                                       inner_hlen + sizeof(struct udphdr))) {
-                                return false;
+                                goto out;
                         }
 
                         /* Extract inner UDP header from ICMP error payload.  */
                         inner_udp =
                             (struct udphdr *)((u_char *)inner_ip + inner_hlen);
-                        return ntohs(inner_udp->uh_dport) == expected_port;
+                        ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
+                        goto out;
                 }
 
                 {
@@ -153,17 +156,19 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                         if (len <
                             (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
                                       inner_hlen + ICMP_ERROR_HDR_OFFSET)) {
-                                return false;
+                                goto out;
                         }
 
                         inner_icp =
                             (struct icmp *)((u_char *)inner_ip + inner_hlen);
-                        return inner_icp->icmp_id == expected_id &&
-                               inner_icp->icmp_seq == expected_seq;
+                        ret_val = (inner_icp->icmp_id == expected_id &&
+                                   inner_icp->icmp_seq == expected_seq);
+                        goto out;
                 }
         }
 
-        return false;
+out:
+        return ret_val;
 }
 
 /*
@@ -176,16 +181,18 @@ is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
 {
         struct icmp6_hdr *icp;
+        bool ret_val = false;
 
         if (len < (ssize_t)sizeof(struct icmp6_hdr)) {
-                return false;
+                goto out;
         }
 
         icp = (struct icmp6_hdr *)buf;
 
         if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
-                return icp->icmp6_id == expected_id &&
-                       icp->icmp6_seq == expected_seq;
+                ret_val = (icp->icmp6_id == expected_id &&
+                           icp->icmp6_seq == expected_seq);
+                goto out;
         }
 
         if (icp->icmp6_type == ICMP6_TIME_EXCEEDED ||
@@ -195,7 +202,7 @@ is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                 if (len <
                     (ssize_t)(sizeof(struct icmp6_hdr) +
                               sizeof(struct ip6_hdr) + ICMP_ERROR_HDR_OFFSET)) {
-                        return false;
+                        goto out;
                 }
 
                 inner_ip = (struct ip6_hdr *)(icp + 1);
@@ -205,7 +212,8 @@ is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
 
                         inner_udp = (struct udphdr *)((u_char *)inner_ip +
                                                       sizeof(struct ip6_hdr));
-                        return ntohs(inner_udp->uh_dport) == expected_port;
+                        ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
+                        goto out;
                 }
 
                 {
@@ -214,12 +222,14 @@ is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                         inner_icp =
                             (struct icmp6_hdr *)((u_char *)inner_ip +
                                                  sizeof(struct ip6_hdr));
-                        return inner_icp->icmp6_id == expected_id &&
-                               inner_icp->icmp6_seq == expected_seq;
+                        ret_val = (inner_icp->icmp6_id == expected_id &&
+                                   inner_icp->icmp6_seq == expected_seq);
+                        goto out;
                 }
         }
 
-        return false;
+out:
+        return ret_val;
 }
 
 /*
@@ -321,6 +331,7 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
         int level;
         int optname;
         int ttl_val;
+        bool ret_val = false;
 
         level = (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
         optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
@@ -347,10 +358,11 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                 if (sendto(st->udp_sock, dummy, 0, 0,
                            (struct sockaddr *)&target,
                            config->target_addr_len) < 0) {
-                        return false;
+                        goto out;
                 }
 
-                return true;
+                ret_val = true;
+                goto out;
         }
 
         setsockopt(net_get_fd(st->sock), level, optname, &ttl_val,
@@ -379,10 +391,13 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
         if (net_send_icmp_packet(st->sock, st->packet, st->header_size,
                                  (struct sockaddr *)&config->target_addr,
                                  config->target_addr_len) < 0) {
-                return false;
+                goto out;
         }
 
-        return true;
+        ret_val = true;
+
+out:
+        return ret_val;
 }
 
 /*
@@ -395,6 +410,8 @@ static bool
 check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 ssize_t n)
 {
+        bool ret_val = false;
+
         if (config->family == AF_INET) {
                 struct ip *ip_hdr;
                 int hlen;
@@ -410,7 +427,8 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                         if (icp->icmp_type == ICMP_ECHOREPLY ||
                             (config->use_udp &&
                              icp->icmp_type == ICMP_UNREACH)) {
-                                return true;
+                                ret_val = true;
+                                goto out;
                         }
                 }
         } else {
@@ -422,12 +440,14 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                         if (icp->icmp6_type == ICMP6_ECHO_REPLY ||
                             (config->use_udp &&
                              icp->icmp6_type == ICMP6_DST_UNREACH)) {
-                                return true;
+                                ret_val = true;
+                                goto out;
                         }
                 }
         }
 
-        return false;
+out:
+        return ret_val;
 }
 
 /*
@@ -473,6 +493,7 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                       u_short dest_port)
 {
         struct pollfd pfd;
+        bool ret_val = false;
 
         pfd.fd = net_get_fd(st->sock);
         pfd.events = POLLIN;
@@ -536,10 +557,12 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                         st->target_reached = true;
                 }
 
-                return true;
+                ret_val = true;
+                goto out;
         }
 
-        return false;
+out:
+        return ret_val;
 }
 
 /*

@@ -41,6 +41,10 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
+#ifndef ETH_ALEN
+#define ETH_ALEN 6
+#endif
+
 /*
  *		A R P I N G _ C O N F I G
  *

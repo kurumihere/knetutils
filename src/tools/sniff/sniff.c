@@ -456,10 +456,12 @@ sniff_run(const sniff_config_t *config)
         sniff_state_t st;
         __attribute__((aligned(8))) u_char buf[SNIFF_BUF_SIZE];
         ssize_t n;
+        int ret = EXIT_SUCCESS;
 
         if (!config->iface) {
                 log_err("Interface is required for sniffing");
-                return EXIT_FAILURE;
+                ret = EXIT_FAILURE;
+                goto out;
         }
 
         memset(&sa, 0, sizeof(sa));
@@ -532,9 +534,12 @@ sniff_run(const sniff_config_t *config)
                 fclose(st.pcap_fp);
         }
 
-        net_close_raw_socket(st.sock);
+        if (st.sock) {
+                net_close_raw_socket(st.sock);
+        }
         printf("\n");
         log_info("Captured %d packets", st.packets_captured);
 
-        return EXIT_SUCCESS;
+out:
+        return ret;
 }

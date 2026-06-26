@@ -82,6 +82,7 @@ sniff_cli_main(int c, char **av)
         sniff_config_t config;
         int ch;
         const char *prog_name;
+        int ret = EXIT_SUCCESS;
 
         prog_name = *av;
 
@@ -104,10 +105,11 @@ sniff_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(prog_name);
-                        return EXIT_SUCCESS;
+                        goto out;
                 default:
                         print_usage(prog_name);
-                        return EXIT_FAILURE;
+                        ret = EXIT_FAILURE;
+                        goto out;
                 }
         }
 
@@ -117,7 +119,8 @@ sniff_cli_main(int c, char **av)
         if (!config.iface) {
                 log_err("Interface is required (-I)");
                 print_usage(prog_name);
-                return EXIT_FAILURE;
+                ret = EXIT_FAILURE;
+                goto out;
         }
 
         /* Raw sockets require root capabilities.  */
@@ -125,5 +128,7 @@ sniff_cli_main(int c, char **av)
                 log_warn("sniff requires root privileges to open raw sockets.");
         }
 
-        return sniff_run(&config);
+        ret = sniff_run(&config);
+out:
+        return ret;
 }

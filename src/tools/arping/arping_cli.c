@@ -147,14 +147,14 @@ arping_cli_main(int c, char **av)
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
-                        return EXIT_FAILURE;
+                        goto err;
                 }
         }
 
         if (!config.iface) {
                 log_err("Network interface is required (-I option)");
                 print_usage(*av);
-                return EXIT_FAILURE;
+                goto err;
         }
 
         c -= optind;
@@ -162,7 +162,7 @@ arping_cli_main(int c, char **av)
 
         if (c < 1 && !config.gateway && !config.unsolicited) {
                 log_err("Target IP/hostname is required");
-                return EXIT_FAILURE;
+                goto err;
         }
 
         if (!net_get_iface_mac(config.iface, config.source_mac)) {
@@ -199,7 +199,7 @@ arping_cli_main(int c, char **av)
                 if (c < 1) {
                         log_err("Missing destination IP address");
                         print_usage(*av);
-                        return EXIT_FAILURE;
+                        goto err;
                 }
                 target_ip_str = *av;
                 if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
@@ -218,4 +218,7 @@ arping_cli_main(int c, char **av)
         }
 
         return arping_run(&config);
+
+err:
+        return EXIT_FAILURE;
 }

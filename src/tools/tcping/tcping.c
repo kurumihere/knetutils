@@ -292,6 +292,8 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                   u_int64_t wait_until, u_int64_t send_time)
 {
         struct pollfd pfd;
+        bool ret_val = false;
+
         pfd.fd = net_get_fd(st->sock);
         pfd.events = POLLIN;
 
@@ -352,11 +354,13 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                         rtt = time_diff_ns(send_time, recv_time);
                         print_tcping_reply(config, st, r_tcph, rtt);
                         st->received++;
-                        return true;
+                        ret_val = true;
+                        goto out;
                 }
         }
 
-        return false;
+out:
+        return ret_val;
 }
 
 /*

@@ -82,6 +82,7 @@ pscan_cli_main(int c, char **av)
 {
         pscan_config_t config;
         int ch;
+        int ret = EXIT_SUCCESS;
         const char *target_ip_str;
 
         memset(&config, 0, sizeof(config));
@@ -148,10 +149,11 @@ pscan_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
-                        return EXIT_SUCCESS;
+                        goto out;
                 default:
                         print_usage(*av);
-                        return EXIT_FAILURE;
+                        ret = EXIT_FAILURE;
+                        goto out;
                 }
         }
 
@@ -160,7 +162,8 @@ pscan_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
-                return EXIT_FAILURE;
+                ret = EXIT_FAILURE;
+                goto out;
         }
 
         target_ip_str = *av;
@@ -171,5 +174,7 @@ pscan_cli_main(int c, char **av)
                 /* NOT REACHED */
         }
 
-        return pscan_run(&config);
+        ret = pscan_run(&config);
+out:
+        return ret;
 }

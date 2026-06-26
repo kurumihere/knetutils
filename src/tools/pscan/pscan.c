@@ -157,7 +157,7 @@ grab_banner(const pscan_config_t *config, u_short port, char *banner_buf,
 
         fd = socket(config->target_addr.ss_family, SOCK_STREAM, 0);
         if (fd < 0)
-                return;
+                goto out;
 
         tv.tv_sec = 0;
         tv.tv_usec = 500000;
@@ -171,28 +171,31 @@ grab_banner(const pscan_config_t *config, u_short port, char *banner_buf,
                 ((struct sockaddr_in6 *)&dst)->sin6_port = htons(port);
         }
 
-        if (connect(fd, (struct sockaddr *)&dst, config->target_addr_len) ==
-            0) {
+        if (connect(fd, (struct sockaddr *)&dst, config->target_addr_len) != 0)
+                goto err_close;
+
+        n = recv(fd, banner_buf, banner_len - 1, 0);
+        if (n <= 0) {
+                send(fd, http_req, strlen(http_req), 0);
                 n = recv(fd, banner_buf, banner_len - 1, 0);
-                if (n <= 0) {
-                        send(fd, http_req, strlen(http_req), 0);
-                        n = recv(fd, banner_buf, banner_len - 1, 0);
-                }
-                if (n > 0) {
-                        banner_buf[n] = '\0';
-                        for (i = 0; i < n; i++) {
-                                if (banner_buf[i] == '\r' ||
-                                    banner_buf[i] == '\n') {
-                                        banner_buf[i] = '\0';
-                                        break;
-                                }
-                                if (banner_buf[i] < 32 || banner_buf[i] > 126) {
-                                        banner_buf[i] = '.';
-                                }
+        }
+        if (n > 0) {
+                banner_buf[n] = '\0';
+                for (i = 0; i < n; i++) {
+                        if (banner_buf[i] == '\r' || banner_buf[i] == '\n') {
+                                banner_buf[i] = '\0';
+                                break;
+                        }
+                        if (banner_buf[i] < 32 || banner_buf[i] > 126) {
+                                banner_buf[i] = '.';
                         }
                 }
         }
+
+err_close:
         close(fd);
+out:
+        return;
 }
 /*
  *		S E N D _ P R O B E
@@ -220,7 +223,7 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
                 st->sent_time[dport] = get_time_ns();
                 sendto(st->send_fd, NULL, 0, 0, (struct sockaddr *)&dst,
                        config->target_addr_len);
-                return;
+                goto out;
         }
 
         memset(&tcph, 0, sizeof(tcph));
@@ -278,6 +281,8 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
                             config->target_addr_len) < 0) {
         }
         st->sent_time[dport] = get_time_ns();
+out:
+        return;
 }
 
 static void
@@ -305,7 +310,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         iph = (struct ip *)buf;
                         hlen = iph->ip_hl << 2;
                         if (len < hlen + 8)
-                                return;
+                                goto out;
                         icmph = (struct icmp *)(buf + hlen);
                         /* Check for ICMP Destination Port Unreachable message.
                          */
@@ -314,7 +319,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                                 orig_iph = (struct ip *)&icmph->icmp_data;
                                 orig_iph_len = orig_iph->ip_hl << 2;
                                 if (len < hlen + 8 + orig_iph_len + 8)
-                                        return;
+                                        goto out;
                                 udph = (struct udphdr *)((u_char *)orig_iph +
                                                          orig_iph_len);
                                 port = ntohs(udph->uh_dport);
@@ -327,12 +332,12 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         u_short port;
 
                         if (len < 8)
-                                return;
+                                goto out;
                         icmph = (struct icmp6_hdr *)buf;
                         if (icmph->icmp6_type == ICMP6_DST_UNREACH &&
                             icmph->icmp6_code == ICMP6_DST_UNREACH_NOPORT) {
                                 if (len < 8 + 40 + 8)
-                                        return;
+                                        goto out;
                                 orig_iph = (struct ip6_hdr *)(buf + 8);
                                 udph =
                                     (struct udphdr *)((u_char *)orig_iph + 40);
@@ -340,11 +345,11 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                                 st->closed_ports[port] = true;
                         }
                 }
-                return;
+                goto out;
         }
 
         if (len < (ssize_t)sizeof(struct tcphdr))
-                return;
+                goto out;
 
         getnameinfo((struct sockaddr *)src,
                     src->ss_family == AF_INET ? sizeof(struct sockaddr_in)
@@ -352,7 +357,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                     src_str, sizeof(src_str), NULL, 0, NI_NUMERICHOST);
 
         if (strcmp(src_str, st->target_str) != 0)
-                return;
+                goto out;
 
         ttl = 0;
         if (src->ss_family == AF_INET) {
@@ -362,7 +367,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                 iph = (struct ip *)buf;
                 ip_hlen = iph->ip_hl << 2;
                 if (len < ip_hlen + (ssize_t)sizeof(struct tcphdr))
-                        return;
+                        goto out;
                 tcph = (struct tcphdr *)(buf + ip_hlen);
                 ttl = iph->ip_ttl;
         } else {
@@ -370,11 +375,11 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
         }
 
         if (ntohs(tcph->th_dport) != st->sport)
-                return;
+                goto out;
 
         port = ntohs(tcph->th_sport);
         if (port < config->start_port || port > config->end_port)
-                return;
+                goto out;
 
         /* SYN/ACK indicates an open port in half-open scan.  */
         if ((tcph->th_flags & TH_SYN) && (tcph->th_flags & TH_ACK)) {
@@ -428,6 +433,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         }
                 }
         }
+out:
+        return;
 }
 /*
  *		D R A I N _ P A C K E T S

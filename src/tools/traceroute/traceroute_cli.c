@@ -87,6 +87,8 @@ traceroute_cli_main(int c, char **av)
         const char *target_ip_str;
         const char *prog_name;
 
+        int ret = EXIT_FAILURE;
+
         prog_name = *av;
 
         memset(&config, 0, sizeof(config));
@@ -130,10 +132,10 @@ traceroute_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(prog_name);
-                        return EXIT_SUCCESS;
+                        ret = EXIT_SUCCESS;
+                        goto out;
                 default:
-                        print_usage(prog_name);
-                        return EXIT_FAILURE;
+                        goto usage_err;
                 }
         }
 
@@ -142,8 +144,7 @@ traceroute_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
-                print_usage(prog_name);
-                return EXIT_FAILURE;
+                goto usage_err;
         }
 
         target_ip_str = *av;
@@ -167,5 +168,12 @@ traceroute_cli_main(int c, char **av)
                          "sockets.");
         }
 
-        return traceroute_run(&config);
+        ret = traceroute_run(&config);
+        goto out;
+
+usage_err:
+        print_usage(prog_name);
+
+out:
+        return ret;
 }

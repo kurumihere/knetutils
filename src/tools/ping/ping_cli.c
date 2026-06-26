@@ -177,7 +177,7 @@ ping_cli_main(int c, char **av)
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
-                        return EXIT_FAILURE;
+                        goto err;
                 }
         }
 
@@ -186,7 +186,7 @@ ping_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
-                return EXIT_FAILURE;
+                goto err;
         }
 
         target_ip_str = *av;
@@ -207,4 +207,7 @@ ping_cli_main(int c, char **av)
         }
 
         return ping_run(&config);
+
+err:
+        return EXIT_FAILURE;
 }

@@ -110,6 +110,7 @@ net_get_iface_mac(const char *iface, u_char *mac)
 #ifdef __linux__
         int sock;
         struct ifreq ifr;
+        bool ret = false;
 
         sock = socket(AF_INET, SOCK_DGRAM, 0);
         if (sock < 0) {
@@ -120,13 +121,15 @@ net_get_iface_mac(const char *iface, u_char *mac)
         strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
 
         if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
-                close(sock);
-                return false;
+                goto out;
         }
 
         memcpy(mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+        ret = true;
+
+out:
         close(sock);
-        return true;
+        return ret;
 #else
         struct ifaddrs *ifap, *ifa;
         bool found = false;
@@ -219,8 +222,7 @@ net_open_raw_socket(const char *iface, u_short protocol)
 
         ifindex = net_get_iface_index(iface);
         if (ifindex == 0) {
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         memset(&sll, 0, sizeof(sll));
@@ -229,15 +231,13 @@ net_open_raw_socket(const char *iface, u_short protocol)
         sll.sll_protocol = htons(protocol);
 
         if (bind(fd, (struct sockaddr *)&sll, sizeof(sll)) < 0) {
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_raw_socket: memory allocation failed");
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock->fd = fd;
@@ -245,6 +245,10 @@ net_open_raw_socket(const char *iface, u_short protocol)
         sock->is_dgram = false;
 
         return sock;
+
+err_close:
+        close(fd);
+        return NULL;
 #else
         int fd = -1;
         char bpf_path[BPF_PATH_MAX];
@@ -271,22 +275,19 @@ net_open_raw_socket(const char *iface, u_short protocol)
         memset(&ifr, 0, sizeof(ifr));
         strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
         if (ioctl(fd, BIOCSETIF, &ifr) < 0) {
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         ioctl(fd, BIOCIMMEDIATE, &opt);
 
         if (ioctl(fd, BIOCGBLEN, &blen) < 0) {
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_raw_socket: memory allocation failed");
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock->fd = fd;
@@ -299,12 +300,16 @@ net_open_raw_socket(const char *iface, u_short protocol)
         if (!sock->bpf_buf) {
                 log_err("net_open_raw_socket: memory allocation failed for "
                         "bpf_buf");
-                close(fd);
-                free(sock);
-                return NULL;
+                goto err_free;
         }
 
         return sock;
+
+err_free:
+        free(sock);
+err_close:
+        close(fd);
+        return NULL;
 #endif
 }
 
@@ -338,8 +343,7 @@ net_open_icmp_socket(int family)
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_icmp_socket: memory allocation failed");
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock->fd = fd;
@@ -349,6 +353,10 @@ net_open_icmp_socket(int family)
         sock->bpf_buf_len = 0;
 #endif
         return sock;
+
+err_close:
+        close(fd);
+        return NULL;
 }
 
 /*
@@ -605,6 +613,7 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         char line[MAX_LINE_LEN];
         char name[MAX_IFACE_LEN];
         u_long dst, gw;
+        bool ret = false;
 
         fp = fopen("/proc/net/route", "r");
         if (!fp) {
@@ -612,8 +621,7 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         }
 
         if (!fgets(line, sizeof(line), fp)) {
-                fclose(fp);
-                return false;
+                goto out;
         }
 
         while (fgets(line, sizeof(line), fp)) {
@@ -625,19 +633,21 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
                  */
                 if (dst == 0 && strcmp(name, iface) == 0) {
                         *gateway_ip = (u_int)gw;
-                        fclose(fp);
-                        return true;
+                        ret = true;
+                        goto out;
                 }
         }
 
+out:
         fclose(fp);
-        return false;
+        return ret;
 #else
         int mib[6] = {CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_FLAGS, RTF_GATEWAY};
         size_t len;
         char *buf;
         char *next;
         char *lim;
+        bool ret = false;
 
         if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0) {
                 return false;
@@ -650,8 +660,7 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         }
 
         if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) {
-                free(buf);
-                return false;
+                goto out;
         }
 
         next = buf;
@@ -691,13 +700,14 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
                 if (dst && dst->sin_addr.s_addr == 0 && gw &&
                     rtm->rtm_index == if_nametoindex(iface)) {
                         *gateway_ip = gw->sin_addr.s_addr;
-                        free(buf);
-                        return true;
+                        ret = true;
+                        goto out;
                 }
         }
 
+out:
         free(buf);
-        return false;
+        return ret;
 #endif
 }
 
@@ -720,8 +730,7 @@ net_open_ip_raw_socket(int family, int protocol)
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_ip_raw_socket: memory allocation failed");
-                close(fd);
-                return NULL;
+                goto err_close;
         }
 
         sock->fd = fd;
@@ -731,6 +740,10 @@ net_open_ip_raw_socket(int family, int protocol)
         sock->bpf_buf_len = 0;
 #endif
         return sock;
+
+err_close:
+        close(fd);
+        return NULL;
 }
 
 /*
@@ -769,6 +782,7 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
 {
         int sock;
         struct sockaddr_storage dst_copy;
+        bool ret = false;
 
         sock = socket(dst->ss_family, SOCK_DGRAM, 0);
         if (sock < 0) {
@@ -790,17 +804,18 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
 
         /* Perform UDP connect to route target and determine source IP.  */
         if (connect(sock, (const struct sockaddr *)&dst_copy, dst_len) < 0) {
-                close(sock);
-                return false;
+                goto out;
         }
 
         if (getsockname(sock, (struct sockaddr *)src, src_len) < 0) {
-                close(sock);
-                return false;
+                goto out;
         }
 
+        ret = true;
+
+out:
         close(sock);
-        return true;
+        return ret;
 }
 
 /*
