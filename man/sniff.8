@@ -8,6 +8,7 @@
 .Nm
 .Op Fl v
 .Op Fl c Ar count
+.Op Fl w Ar file
 .Fl I Ar interface
 .Sh DESCRIPTION
 The
@@ -24,6 +25,10 @@ Stop after receiving
 packets.
 .It Fl I Ar interface
 Specify the network interface to sniff on. This option is required.
+.It Fl w Ar file
+Write captured packets to a PCAP format
+.Ar file
+for later analysis with tools like Wireshark or tcpdump.
 .It Fl v
 Increase verbosity. Can be specified multiple times up to 3 (e.g.
 .Fl vvv ) .

@@ -66,6 +66,7 @@ install: all
 	install -m 644 man/sniff.8 $(DESTDIR)$(PREFIX)/share/man/man8/
 	install -m 644 man/tcping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
 	install -m 644 man/traceroute.8 $(DESTDIR)$(PREFIX)/share/man/man8/
+	install -m 644 man/pscan.8 $(DESTDIR)$(PREFIX)/share/man/man8/
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/knetutils
@@ -80,6 +81,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/sniff.8
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/tcping.8
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/traceroute.8
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/pscan.8
 
 analyze: clean
 	scan-build $(MAKE) all

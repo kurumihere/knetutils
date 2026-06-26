@@ -6,9 +6,10 @@
 .Nd fast asynchronous TCP SYN and UDP port scanner
 .Sh SYNOPSIS
 .Nm
-.Op Fl 46u
+.Op Fl 46jORsu
 .Op Fl I Ar iface
 .Op Fl p Ar ports
+.Op Fl r Ar rate
 .Op Fl W Ar timeout
 .Ar destination
 .Sh DESCRIPTION
@@ -25,8 +26,18 @@ Use IPv4 only.
 Use IPv6 only.
 .It Fl I Ar iface
 Bind to a specific interface or source IP address.
+.It Fl j
+Format the output as JSON.
+.It Fl O
+Enable passive OS fingerprinting by analyzing TCP window size and IP TTL of incoming SYN/ACK packets.
 .It Fl p Ar ports
 Specify the port range to scan. Can be a single port (e.g., 80) or a range (e.g., 1-1024).
+.It Fl R
+Randomize the order in which ports are scanned.
+.It Fl r Ar rate
+Limit the scan speed to the specified maximum number of packets per second.
+.It Fl s
+Enable service banner grabbing by sending an HTTP GET request to open ports.
 .It Fl u
 Perform a UDP scan instead of a TCP SYN scan. It sends empty datagrams and relies on ICMP Port Unreachable responses to filter out closed ports.
 .It Fl W Ar timeout
