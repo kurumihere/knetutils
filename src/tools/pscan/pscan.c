@@ -32,15 +32,36 @@ typedef struct {
 } pscan_state_t;
 
 static const char *
-guess_os_from_ttl(uint8_t ttl)
+guess_os_from_ttl(uint8_t ttl, uint16_t win)
 {
         if (ttl == 0)
                 return "Unknown";
-        if (ttl <= 64)
-                return "Linux/Unix/macOS";
-        if (ttl <= 128)
-                return "Windows";
-        return "Cisco/Network Device";
+
+        if (ttl <= 64) {
+                if (win == 5840 || win == 29200 || win == 65535)
+                        return "Linux";
+                if (win == 65535 || win == 4128)
+                        return "macOS/iOS";
+                if (win == 16384)
+                        return "OpenBSD";
+                if (win == 65228)
+                        return "FreeBSD";
+                return "Linux/Unix/macOS (Generic TTL=64)";
+        }
+
+        if (ttl <= 128) {
+                if (win == 8192 || win == 64240 || win == 65535)
+                        return "Windows (Modern)";
+                if (win == 16384 || win == 65535)
+                        return "Windows (Legacy)";
+                return "Windows (Generic TTL=128)";
+        }
+
+        if (win == 4128 || win == 8760)
+                return "Cisco Router/Switch";
+        if (win == 65535)
+                return "Solaris/AIX";
+        return "Network Device/Legacy (Generic TTL=255)";
 }
 
 struct ipv6_pseudo_header {
@@ -297,7 +318,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
 
                         if (config->os_fingerprint &&
                             src->ss_family == AF_INET) {
-                                os_guess = guess_os_from_ttl(ttl);
+                                os_guess =
+                                    guess_os_from_ttl(ttl, ntohs(tcph->th_win));
                                 strncpy(st->os_guesses[port], os_guess,
                                         sizeof(st->os_guesses[port]) - 1);
                         }
