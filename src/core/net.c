@@ -499,7 +499,19 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
         if (sock < 0)
                 return false;
 
-        if (connect(sock, (const struct sockaddr *)dst, dst_len) < 0) {
+        struct sockaddr_storage dst_copy;
+        memcpy(&dst_copy, dst, dst_len);
+        if (dst_copy.ss_family == AF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)&dst_copy;
+                if (sin->sin_port == 0)
+                        sin->sin_port = htons(53);
+        } else if (dst_copy.ss_family == AF_INET6) {
+                struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&dst_copy;
+                if (sin6->sin6_port == 0)
+                        sin6->sin6_port = htons(53);
+        }
+
+        if (connect(sock, (const struct sockaddr *)&dst_copy, dst_len) < 0) {
                 close(sock);
                 return false;
         }
