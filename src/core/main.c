@@ -7,6 +7,7 @@ int ping_cli_main(int argc, char *argv[]);
 int sniff_cli_main(int argc, char *argv[]);
 int tcping_cli_main(int argc, char *argv[]);
 int traceroute_cli_main(int argc, char *argv[]);
+int pscan_cli_main(int argc, char *argv[]);
 
 static const char *
 get_basename(const char *path)
@@ -33,6 +34,8 @@ main(int argc, char *argv[])
                 return tcping_cli_main(argc, argv);
         } else if (strcmp(prog_name, "traceroute") == 0) {
                 return traceroute_cli_main(argc, argv);
+        } else if (strcmp(prog_name, "pscan") == 0) {
+                return pscan_cli_main(argc, argv);
         }
 
         if (argc < 2) {
@@ -43,6 +46,7 @@ main(int argc, char *argv[])
                 fprintf(stderr, "  sniff\n");
                 fprintf(stderr, "  tcping\n");
                 fprintf(stderr, "  traceroute\n");
+                fprintf(stderr, "  pscan\n");
                 return EXIT_FAILURE;
         }
 
@@ -57,6 +61,8 @@ main(int argc, char *argv[])
                 return tcping_cli_main(argc - 1, argv + 1);
         } else if (strcmp(cmd, "traceroute") == 0) {
                 return traceroute_cli_main(argc - 1, argv + 1);
+        } else if (strcmp(cmd, "pscan") == 0) {
+                return pscan_cli_main(argc - 1, argv + 1);
         }
 
         fprintf(stderr, "knetutils: Unknown command '%s'\n", cmd);

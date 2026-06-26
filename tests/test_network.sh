@@ -41,6 +41,9 @@ if [ "$HAS_ROOT" -eq 1 ]; then
     echo "Testing tcping (blackhole)..."
     $SUDO ./bin/tcping -c 1 -W 1 192.0.2.1 80 > /dev/null || true
 
+    echo "Testing pscan (localhost)..."
+    $SUDO ./bin/pscan -p 80-81 -W 1 127.0.0.1 > /dev/null || true
+
     # Find a default interface to test sniff and arping
     IFACE=$($SUDO ip route 2>/dev/null | grep default | awk '{print $5}' || echo "lo")
     if [ -n "$IFACE" ]; then

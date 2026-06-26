@@ -21,7 +21,9 @@ SRCS = src/core/main.c \
        src/tools/tcping/tcping.c \
        src/tools/tcping/tcping_cli.c \
        src/tools/traceroute/traceroute.c \
-       src/tools/traceroute/traceroute_cli.c
+       src/tools/traceroute/traceroute_cli.c \
+       src/tools/pscan/pscan.c \
+       src/tools/pscan/pscan_cli.c
 
 OBJS = $(SRCS:.c=.o)
 
@@ -43,9 +45,10 @@ links: $(TARGET)
 	@ln -sf knetutils bin/sniff
 	@ln -sf knetutils bin/tcping
 	@ln -sf knetutils bin/traceroute
+	@ln -sf knetutils bin/pscan
 
 clean:
-	rm -f $(OBJS) $(TARGET) bin/arping bin/ping bin/sniff bin/tcping bin/traceroute
+	rm -f $(OBJS) $(TARGET) bin/arping bin/ping bin/sniff bin/tcping bin/traceroute bin/pscan
 	rm -rf bin/
 
 install: all
@@ -56,6 +59,7 @@ install: all
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/sniff
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/tcping
 	ln -sf knetutils $(DESTDIR)$(BINDIR)/traceroute
+	ln -sf knetutils $(DESTDIR)$(BINDIR)/pscan
 	install -d $(DESTDIR)$(PREFIX)/share/man/man8
 	install -m 644 man/arping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
 	install -m 644 man/ping.8 $(DESTDIR)$(PREFIX)/share/man/man8/
@@ -70,6 +74,7 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/sniff
 	rm -f $(DESTDIR)$(BINDIR)/tcping
 	rm -f $(DESTDIR)$(BINDIR)/traceroute
+	rm -f $(DESTDIR)$(BINDIR)/pscan
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/arping.8
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/ping.8
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/sniff.8

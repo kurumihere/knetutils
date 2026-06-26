@@ -5,7 +5,7 @@ echo "Running knetutils basic tests..."
 
 ./bin/knetutils --help > /dev/null 2>&1 || true
 
-TOOLS=("arping" "ping" "sniff" "tcping" "traceroute")
+TOOLS=("arping" "ping" "sniff" "tcping" "traceroute" "pscan")
 
 for tool in "${TOOLS[@]}"; do
     echo "Testing $tool help menu..."
