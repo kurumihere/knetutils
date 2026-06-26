@@ -20,18 +20,18 @@ fi
 
 # 1. ping
 echo "Testing ping (success case)..."
-./bin/ping -c 1 127.0.0.1 > /dev/null
+$SUDO ./bin/ping -c 1 127.0.0.1 > /dev/null
 
 echo "Testing ping (timeout case)..."
 # 192.0.2.1 is TEST-NET-1, guaranteed to be unroutable/blackholed
-if ./bin/ping -c 1 -W 1 192.0.2.1 > /dev/null 2>&1; then
+if $SUDO ./bin/ping -c 1 -W 1 192.0.2.1 > /dev/null 2>&1; then
     echo "Ping unexpectedly succeeded on a blackholed IP."
     exit 1
 fi
 
 # 2. traceroute
 echo "Testing traceroute..."
-./bin/traceroute 127.0.0.1 -m 2 -q 1 > /dev/null || true # Accept failure if unprivileged ICMP fails, just ensure no segfault
+$SUDO ./bin/traceroute 127.0.0.1 -m 2 -q 1 > /dev/null || true # Accept failure if unprivileged ICMP fails, just ensure no segfault
 
 # 3. Root-required tests
 if [ "$HAS_ROOT" -eq 1 ]; then
