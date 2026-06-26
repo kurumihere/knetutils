@@ -92,11 +92,6 @@ typedef struct {
 
 static volatile sig_atomic_t keep_running = 1;
 
-/*
- *		H A N D L E _ S I G I N T
- *
- * Signal handler for SIGINT, gracefully stops the capture loop.
- */
 static void
 handle_sigint(int sig)
 {
@@ -110,11 +105,6 @@ typedef struct {
         FILE *pcap_fp;
 } sniff_state_t;
 
-/*
- *		W R I T E _ P C A P _ P A C K E T
- *
- * Append a captured packet to the PCAP file.
- */
 static void
 write_pcap_packet(FILE *fp, const u_char *buf, ssize_t len)
 {
@@ -136,11 +126,6 @@ write_pcap_packet(FILE *fp, const u_char *buf, ssize_t len)
         fflush(fp);
 }
 
-/*
- *		P R I N T _ H E X _ D U M P _ L I N E
- *
- * Helper function to print a single line of a hex dump.
- */
 inline static void
 print_hex_dump_line(const u_char *data, size_t len, size_t offset)
 {
@@ -172,11 +157,6 @@ print_hex_dump_line(const u_char *data, size_t len, size_t offset)
         printf("\n");
 }
 
-/*
- *		P R I N T _ H E X _ D U M P
- *
- * Print a buffer in canonical hex dump format.
- */
 static void
 print_hex_dump(const u_char *data, size_t len)
 {
@@ -188,11 +168,6 @@ print_hex_dump(const u_char *data, size_t len)
         }
 }
 
-/*
- *		H A N D L E _ T C P
- *
- * Parse TCP header and print connection details.
- */
 static size_t
 handle_tcp(const u_char *buf, size_t offset, ssize_t n)
 {
@@ -229,15 +204,9 @@ handle_tcp(const u_char *buf, size_t offset, ssize_t n)
         printf("] Seq: %u, Ack: %u, Win: %u\n", ntohl(tcp->th_seq),
                ntohl(tcp->th_ack), ntohs(tcp->th_win));
 
-        /* Calculate TCP header length and advance payload offset.  */
         return offset + (tcp->th_off << TCP_HDR_LEN_SHIFT);
 }
 
-/*
- *		H A N D L E _ U D P
- *
- * Parse UDP header and print details.
- */
 static size_t
 handle_udp(const u_char *buf, size_t offset, ssize_t n)
 {
@@ -255,11 +224,6 @@ handle_udp(const u_char *buf, size_t offset, ssize_t n)
         return offset + sizeof(struct udphdr);
 }
 
-/*
- *		H A N D L E _ I C M P
- *
- * Parse ICMP header and print type and code.
- */
 static size_t
 handle_icmp(const u_char *buf, size_t offset, ssize_t n)
 {
@@ -277,11 +241,6 @@ handle_icmp(const u_char *buf, size_t offset, ssize_t n)
         return offset + ICMP_MIN_HDR_LEN;
 }
 
-/*
- *		H A N D L E _ I C M P V 6
- *
- * Parse ICMPv6 header and print type and code.
- */
 static size_t
 handle_icmpv6(const u_char *buf, size_t offset, ssize_t n)
 {
@@ -299,11 +258,6 @@ handle_icmpv6(const u_char *buf, size_t offset, ssize_t n)
         return offset + sizeof(struct icmp6_hdr);
 }
 
-/*
- *		H A N D L E _ L 4 _ P R O T O C O L
- *
- * Route packet to correct layer 4 handler based on protocol number.
- */
 static size_t
 handle_l4_protocol(const u_char *buf, size_t offset, ssize_t n, u_char l4_proto)
 {
@@ -326,11 +280,6 @@ handle_l4_protocol(const u_char *buf, size_t offset, ssize_t n, u_char l4_proto)
         return offset;
 }
 
-/*
- *		H A N D L E _ I P V 4
- *
- * Parse an IPv4 header, print addressing info, and determine L4 protocol.
- */
 static size_t
 handle_ipv4(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
 {
@@ -344,10 +293,9 @@ handle_ipv4(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
         }
 
         ip_hdr = (struct ip *)(buf + offset);
-        /* Calculate IPv4 header length from IHL field.  */
+
         hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
 
-        /* Extract layer 4 protocol ID.  */
         *l4_proto = ip_hdr->ip_p;
 
         inet_ntop(AF_INET, &ip_hdr->ip_src, src_ip, sizeof(src_ip));
@@ -359,11 +307,6 @@ handle_ipv4(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
         return offset + hlen;
 }
 
-/*
- *		H A N D L E _ I P V 6
- *
- * Parse an IPv6 header, print addressing info, and determine L4 protocol.
- */
 static size_t
 handle_ipv6(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
 {
@@ -388,11 +331,6 @@ handle_ipv6(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
         return offset + sizeof(struct ip6_hdr);
 }
 
-/*
- *		P R O C E S S _ P A C K E T
- *
- * Decode Ethernet frames and dispatch to specific network layer handlers.
- */
 static void
 process_packet(const sniff_config_t *config, const u_char *buf, ssize_t n)
 {
@@ -409,7 +347,7 @@ process_packet(const sniff_config_t *config, const u_char *buf, ssize_t n)
         }
 
         eth = (struct ether_header *)buf;
-        /* Extract Ethernet type in host byte order.  */
+
         eth_type = ntohs(eth->ether_type);
 
         printf("\n\033[1;34m[MAC]\033[0m %02x:%02x:%02x:%02x:%02x:%02x -> "
@@ -444,11 +382,6 @@ process_packet(const sniff_config_t *config, const u_char *buf, ssize_t n)
         }
 }
 
-/*
- *		S N I F F _ R U N
- *
- * Main sniffing loop, captures packets and processes them.
- */
 int
 sniff_run(const sniff_config_t *config)
 {

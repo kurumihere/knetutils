@@ -59,11 +59,6 @@ static const cli_option_t traceroute_options[] = {
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
 
-/*
- *		P R I N T _ U S A G E
- *
- * Print the usage instructions for the traceroute CLI utility.
- */
 static void
 print_usage(const char *prog_name)
 {
@@ -74,11 +69,6 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
-/*
- *		T R A C E R O U T E _ C L I _ M A I N
- *
- * Parse arguments and execute the traceroute tool.
- */
 int
 traceroute_cli_main(int c, char **av)
 {
@@ -103,7 +93,7 @@ traceroute_cli_main(int c, char **av)
         while ((ch = getopt(c, av, "46f:m:q:w:I:nUh")) != -1) {
                 switch (ch) {
                 case '4':
-                        /* Force IPv4 address family.  */
+
                         config.family = AF_INET;
                         break;
                 case '6':
@@ -149,7 +139,6 @@ traceroute_cli_main(int c, char **av)
 
         target_ip_str = *av;
 
-        /* Resolve target IP or hostname to network address.  */
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
@@ -163,7 +152,7 @@ traceroute_cli_main(int c, char **av)
         }
 
         if (getuid() != 0) {
-                /* Raw sockets require root privileges.  */
+
                 log_warn("traceroute requires root privileges to open raw "
                          "sockets.");
         }

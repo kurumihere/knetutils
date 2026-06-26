@@ -41,11 +41,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-/*
- *		T C P I N G _ C O N F I G
- *
- * Contains the configuration parameters for running a tcping operation.
- */
 typedef struct {
         u_short port;
         u_int count;
@@ -58,11 +53,6 @@ typedef struct {
         bool quiet;
 } tcping_config_t;
 
-/*
- *		T C P I N G _ R U N
- *
- * Executes the tcping utility with the provided configuration.
- */
 int tcping_run(const tcping_config_t *config);
 
 #endif

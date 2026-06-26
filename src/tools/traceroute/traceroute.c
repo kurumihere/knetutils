@@ -62,11 +62,6 @@
 
 static volatile sig_atomic_t keep_running = 1;
 
-/*
- *		H A N D L E _ S I G I N T
- *
- * Signal handler for SIGINT, gracefully stops the trace loop.
- */
 static void
 handle_sigint(int sig)
 {
@@ -88,11 +83,6 @@ typedef struct {
         struct sockaddr_storage last_hop_addr;
 } traceroute_state_t;
 
-/*
- *		I S _ O U R _ P R O B E _ V 4
- *
- * Checks if the received ICMPv4 message is a response to our traceroute probe.
- */
 static bool
 is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
@@ -131,7 +121,7 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                 }
 
                 inner_ip = (struct ip *)icp->icmp_data;
-                /* Extract inner IPv4 header length.  */
+
                 inner_hlen = inner_ip->ip_hl << IPV4_HLEN_SHIFT;
 
                 if (use_udp) {
@@ -143,7 +133,6 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                                 goto out;
                         }
 
-                        /* Extract inner UDP header from ICMP error payload.  */
                         inner_udp =
                             (struct udphdr *)((u_char *)inner_ip + inner_hlen);
                         ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
@@ -171,11 +160,6 @@ out:
         return ret_val;
 }
 
-/*
- *		I S _ O U R _ P R O B E _ V 6
- *
- * Checks if the received ICMPv6 message is a response to our traceroute probe.
- */
 static bool
 is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
@@ -232,11 +216,6 @@ out:
         return ret_val;
 }
 
-/*
- *		S E T U P _ T R A C E R O U T E _ S O C K E T S
- *
- * Open ICMP and optional UDP sockets for tracing.
- */
 static void
 setup_traceroute_sockets(const traceroute_config_t *config,
                          traceroute_state_t *st)
@@ -294,11 +273,6 @@ setup_traceroute_sockets(const traceroute_config_t *config,
         }
 }
 
-/*
- *		I N I T _ T R A C E R O U T E _ S T A T E
- *
- * Initialize state structure and allocate packet buffer.
- */
 static void
 init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
 {
@@ -319,11 +293,6 @@ init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
         }
 }
 
-/*
- *		S E N D _ T R A C E R O U T E _ P R O B E
- *
- * Dispatch an ICMP Echo Request or UDP datagram with a specific TTL.
- */
 static bool
 send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                       u_char ttl, u_short dest_port)
@@ -376,7 +345,7 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                 icp->icmp_id = htons(st->pid);
                 icp->icmp_seq = htons(st->seq);
                 icp->icmp_cksum = 0;
-                /* Calculate ICMP header checksum.  */
+
                 icp->icmp_cksum = net_checksum(st->packet, st->header_size);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
@@ -400,12 +369,6 @@ out:
         return ret_val;
 }
 
-/*
- *		C H E C K _ I S _ T A R G E T
- *
- * Check if the received message indicates we have reached the destination
- * target.
- */
 static bool
 check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 ssize_t n)
@@ -422,8 +385,6 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 if (n >= (ssize_t)(hlen + sizeof(struct icmp))) {
                         struct icmp *icp = (struct icmp *)(recv_buf + hlen);
 
-                        /* Reached target if we get an Echo Reply or Port
-                         * Unreachable (UDP) */
                         if (icp->icmp_type == ICMP_ECHOREPLY ||
                             (config->use_udp &&
                              icp->icmp_type == ICMP_UNREACH)) {
@@ -435,8 +396,6 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 if (n >= (ssize_t)sizeof(struct icmp6_hdr)) {
                         struct icmp6_hdr *icp = (struct icmp6_hdr *)recv_buf;
 
-                        /* Reached target if we get an Echo Reply or Port
-                         * Unreachable (UDP) */
                         if (icp->icmp6_type == ICMP6_ECHO_REPLY ||
                             (config->use_udp &&
                              icp->icmp6_type == ICMP6_DST_UNREACH)) {
@@ -450,17 +409,11 @@ out:
         return ret_val;
 }
 
-/*
- *		P R I N T _ H O P _ I N F O
- *
- * Print the hostname and IP address of the intermediate router or final hop.
- */
 static void
 print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
                struct sockaddr_storage *src_addr, socklen_t src_addr_len)
 {
-        /* Only print hop info if it's different from the previous hop in this
-         * TTL round */
+
         if (memcmp(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr)) !=
             0) {
                 char host_str[NI_MAXHOST];
@@ -482,11 +435,6 @@ print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
         }
 }
 
-/*
- *		R E C V _ T R A C E R O U T E _ R E P L Y
- *
- * Await ICMP Time Exceeded or Echo Reply messages from routers.
- */
 static bool
 recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                       u_int64_t wait_until, u_int64_t send_time,
@@ -565,11 +513,6 @@ out:
         return ret_val;
 }
 
-/*
- *		T R A C E R O U T E _ R U N
- *
- * Main traceroute loop, incrementing TTL and awaiting replies.
- */
 int
 traceroute_run(const traceroute_config_t *config)
 {

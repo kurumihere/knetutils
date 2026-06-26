@@ -51,11 +51,6 @@
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
-/*
- *		H A N D L E _ S I G I N T
- *
- * Logic for handle_sigint.
- */
 
 static volatile sig_atomic_t keep_running = 1;
 
@@ -92,11 +87,6 @@ typedef struct {
 
         char target_str[INET6_ADDRSTRLEN];
 } ping_state_t;
-/*
- *		I N T E G E R _ S Q R T
- *
- * Logic for integer_sqrt.
- */
 
 static u_int64_t
 integer_sqrt(u_int64_t n)
@@ -118,11 +108,6 @@ integer_sqrt(u_int64_t n)
         }
         return root;
 }
-/*
- *		U P D A T E _ P I N G _ S T A T S
- *
- * Logic for update_ping_stats.
- */
 
 static void
 update_ping_stats(ping_state_t *st, u_int64_t rtt)
@@ -167,15 +152,6 @@ print_ping_reply(const ping_config_t *config, u_int64_t rtt, ssize_t n,
         }
 }
 
-/*
- *		S E N D _ P I N G _ R E Q U E S T
- *
- * Construct and transmit an ICMP Echo Request packet.
- * For IPv4, the packet ID and Sequence are packed into the ICMP header, and the
- * payload optionally contains a high-resolution 64-bit timestamp. A software
- * checksum is computed. For IPv6, the ICMPv6 header is used and the kernel
- * computes the checksum automatically.
- */
 static void
 send_ping_request(const ping_config_t *config, ping_state_t *st)
 {
@@ -192,7 +168,7 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
                         *ts = get_time_ns();
                 }
                 icp->icmp_cksum = 0;
-                /* Compute IPv4 ICMP header checksum over payload.  */
+
                 icp->icmp_cksum = net_checksum(st->packet, st->total_len);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
@@ -222,15 +198,6 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
         st->sent++;
 }
 
-/*
- *		R E C V _ P I N G _ R E P L Y
- *
- * Listen for and process incoming ICMP Echo Reply packets.
- * Uses poll() with a calculated timeout to wait for incoming data. Upon
- * receiving a packet, we inspect the IP header (for IPv4) to locate the inner
- * ICMP message, verify the ICMP Type, ID, and Sequence numbers, and calculate
- * the Round Trip Time (RTT).
- */
 static bool
 recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 u_int64_t wait_until, u_int64_t send_time)
@@ -271,8 +238,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (n <= 0)
                         continue;
 
-                /* IPv4 raw sockets return the IP header; parse length and TTL.
-                 */
                 if (config->family == AF_INET && !st->is_dgram) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
                         hlen = ip_hdr->ip_hl << 2;
@@ -283,7 +248,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                         continue;
 
                 if (config->family == AF_INET) {
-                        /* Extract ICMP header from IPv4 payload.  */
+
                         struct icmp *r_icp = (struct icmp *)(recv_buf + hlen);
                         r_type = r_icp->icmp_type;
                         r_id = r_icp->icmp_id;
@@ -296,7 +261,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                         r_seq = r_icp->icmp6_seq;
                 }
 
-                /* Verify ICMP reply type and matching identifier.  */
                 if (r_type != st->icmp_rep_type ||
                     (!st->is_dgram && r_id != htons(st->pid)))
                         continue;
@@ -329,11 +293,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
         }
         return false;
 }
-/*
- *		P R I N T _ S T A T I S T I C S
- *
- * Logic for print_statistics.
- */
 
 static void
 print_statistics(const ping_config_t *config, const ping_state_t *st)
@@ -387,11 +346,6 @@ print_statistics(const ping_config_t *config, const ping_state_t *st)
                        max_buf, mdev_buf);
         }
 }
-/*
- *		I N I T _ P I N G _ S T A T E
- *
- * Logic for init_ping_state.
- */
 
 static void
 init_ping_state(const ping_config_t *config, ping_state_t *st)
@@ -400,7 +354,7 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
         st->pid = getpid() & 0xFFFF;
         st->seq = 1;
         st->start_time = get_time_ns();
-        /* Set specific ICMP Echo Request type based on address family.  */
+
         st->icmp_req_type =
             (config->family == AF_INET6) ? ICMP6_ECHO_REQUEST : ICMP_ECHO;
         st->icmp_rep_type =
@@ -427,11 +381,6 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
                 }
         }
 }
-/*
- *		S E T U P _ S O C K E T _ O P T I O N S
- *
- * Logic for setup_socket_options.
- */
 
 static void
 setup_socket_options(const ping_config_t *config, net_socket_t *sock)
@@ -487,11 +436,6 @@ setup_socket_options(const ping_config_t *config, net_socket_t *sock)
                 setsockopt(net_get_fd(sock), level, optname, &tos, sizeof(tos));
         }
 }
-/*
- *		P I N G _ R U N
- *
- * Logic for ping_run.
- */
 
 int
 ping_run(const ping_config_t *config)

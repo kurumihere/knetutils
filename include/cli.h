@@ -40,34 +40,18 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/*
- *		C L I _ O P T I O N
- *
- * Represents a single command-line option for parsing and help menu generation.
- */
 typedef struct {
         char short_opt;
         const char *arg_name;
         const char *description;
 } cli_option_t;
 
-/*
- *		C L I _ A P P
- *
- * Represents a CLI application or command, defining its name, usage, and
- * available options.
- */
 typedef struct {
         const char *prog_name;
         const char *usage_args;
         const cli_option_t *options;
 } cli_app_t;
 
-/*
- *		C L I _ P R I N T _ H E L P
- *
- * Prints the formatted help menu for a given CLI application to standard error.
- */
 void cli_print_help(const cli_app_t *app);
 
 #endif

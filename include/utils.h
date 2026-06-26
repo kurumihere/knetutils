@@ -54,53 +54,18 @@
 #define NS_PER_MS 1000000ULL
 #define NS_PER_US 1000ULL
 
-/*
- *		L O G _ E R R
- *
- * Print a formatted error message to standard error.
- */
 void log_err(const char *fmt, ...);
 
-/*
- *		L O G _ W A R N
- *
- * Print a formatted warning message to standard error.
- */
 void log_warn(const char *fmt, ...);
 
-/*
- *		L O G _ I N F O
- *
- * Print a formatted informational message to standard output.
- */
 void log_info(const char *fmt, ...);
 
-/*
- *		D I E
- *
- * Print a formatted fatal error message to standard error and exit the program.
- */
 void die(const char *fmt, ...) __attribute__((noreturn));
 
-/*
- *		G E T _ T I M E _ N S
- *
- * Retrieve the current monotonic time in nanoseconds.
- */
 u_int64_t get_time_ns(void);
 
-/*
- *		T I M E _ D I F F _ N S
- *
- * Calculate the difference between two timestamps in nanoseconds.
- */
 u_int64_t time_diff_ns(u_int64_t start, u_int64_t end);
 
-/*
- *		F O R M A T _ T I M E
- *
- * Format a time duration in nanoseconds into a human-readable string buffer.
- */
 const char *format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
                         size_t buf_size);
 

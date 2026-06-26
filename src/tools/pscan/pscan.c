@@ -66,11 +66,6 @@ typedef struct {
         bool open_ports[65536];
         bool closed_ports[65536];
 } pscan_state_t;
-/*
- *		G U E S S _ O S _ F R O M _ T T L
- *
- * Logic for guess_os_from_ttl.
- */
 
 static const char *
 guess_os_from_ttl(u_char ttl, u_short win)
@@ -120,11 +115,6 @@ struct ipv4_pseudo_header {
         u_char protocol;
         u_short tcp_length;
 } __attribute__((packed));
-/*
- *		I N I T _ P S C A N _ S T A T E
- *
- * Logic for init_pscan_state.
- */
 
 static void
 init_pscan_state(const pscan_config_t *config, pscan_state_t *st)
@@ -197,11 +187,6 @@ err_close:
 out:
         return;
 }
-/*
- *		S E N D _ P R O B E
- *
- * Logic for send_probe.
- */
 
 static void
 send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
@@ -232,13 +217,13 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
         tcph.th_seq = htonl(1000 + dport);
         tcph.th_ack = 0;
         tcph.th_off = 5;
-        /* Set TCP SYN flag for half-open connection scanning.  */
+
         tcph.th_flags = TH_SYN;
         tcph.th_win = htons(64240);
         tcph.th_sum = 0;
 
         if (config->target_addr.ss_family == AF_INET) {
-                /* Construct IPv4 pseudo-header for TCP checksum calculation. */
+
                 struct ipv4_pseudo_header psh;
                 psh.src_addr =
                     ((struct sockaddr_in *)&st->src_addr)->sin_addr.s_addr;
@@ -312,8 +297,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         if (len < hlen + 8)
                                 goto out;
                         icmph = (struct icmp *)(buf + hlen);
-                        /* Check for ICMP Destination Port Unreachable message.
-                         */
+
                         if (icmph->icmp_type == ICMP_UNREACH &&
                             icmph->icmp_code == ICMP_UNREACH_PORT) {
                                 orig_iph = (struct ip *)&icmph->icmp_data;
@@ -381,7 +365,6 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
         if (port < config->start_port || port > config->end_port)
                 goto out;
 
-        /* SYN/ACK indicates an open port in half-open scan.  */
         if ((tcph->th_flags & TH_SYN) && (tcph->th_flags & TH_ACK)) {
                 if (!st->open_ports[port]) {
                         st->open_ports[port] = true;
@@ -436,11 +419,6 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
 out:
         return;
 }
-/*
- *		D R A I N _ P A C K E T S
- *
- * Logic for drain_packets.
- */
 
 static void
 drain_packets(const pscan_config_t *config, pscan_state_t *st)
@@ -466,11 +444,6 @@ drain_packets(const pscan_config_t *config, pscan_state_t *st)
                 process_packet(config, st, buf, len, &src);
         }
 }
-/*
- *		P S C A N _ R U N
- *
- * Logic for pscan_run.
- */
 
 int
 pscan_run(const pscan_config_t *config)
@@ -623,22 +596,19 @@ pscan_run(const pscan_config_t *config)
                                                    (double)NS_PER_MS);
                                         if (config->os_fingerprint &&
                                             st->os_guesses[port][0] != '\0') {
-                                                /* Output information to the
-                                                 * user. */
+
                                                 printf(",\n      \"os_guess\": "
                                                        "\"%s\"",
                                                        st->os_guesses[port]);
                                         }
                                         if (config->banner_grab &&
                                             st->banners[port][0] != '\0') {
-                                                /* Output information to the
-                                                 * user. */
+
                                                 printf(",\n      \"banner\": "
                                                        "\"%s\"\n",
                                                        st->banners[port]);
                                         } else {
-                                                /* Output information to the
-                                                 * user. */
+
                                                 printf("\n");
                                         }
                                 } else if (config->udp) {

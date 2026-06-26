@@ -45,11 +45,6 @@
 #define ETH_ALEN 6
 #endif
 
-/*
- *		A R P I N G _ C O N F I G
- *
- * Contains the configuration parameters for running an arping operation.
- */
 typedef struct {
         const char *iface;
         u_int target_ip;
@@ -69,11 +64,6 @@ typedef struct {
         const char *time_unit;
 } arping_config_t;
 
-/*
- *		A R P I N G _ R U N
- *
- * Executes the arping utility with the provided configuration.
- */
 int arping_run(const arping_config_t *config);
 
 #endif

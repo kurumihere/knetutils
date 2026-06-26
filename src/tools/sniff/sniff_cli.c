@@ -56,11 +56,6 @@ static const cli_option_t sniff_options[] = {
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
 
-/*
- *		P R I N T _ U S A G E
- *
- * Print the usage instructions for the sniff CLI utility.
- */
 static void
 print_usage(const char *prog_name)
 {
@@ -71,11 +66,6 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
-/*
- *		S N I F F _ C L I _ M A I N
- *
- * Parse arguments and execute the sniff tool.
- */
 int
 sniff_cli_main(int c, char **av)
 {
@@ -97,7 +87,7 @@ sniff_cli_main(int c, char **av)
                         config.max_packets = atoi(optarg);
                         break;
                 case 'w':
-                        /* Save captured packets to PCAP format file.  */
+
                         config.pcap_file = optarg;
                         break;
                 case 'v':
@@ -123,7 +113,6 @@ sniff_cli_main(int c, char **av)
                 goto out;
         }
 
-        /* Raw sockets require root capabilities.  */
         if (getuid() != 0) {
                 log_warn("sniff requires root privileges to open raw sockets.");
         }

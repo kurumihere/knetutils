@@ -43,11 +43,6 @@
 
 #define PING_MAX_PATTERN_LEN 16
 
-/*
- *		P I N G _ C O N F I G
- *
- * Contains the configuration parameters for running a ping operation.
- */
 typedef struct {
         u_int count;
         u_int64_t timeout_ns;
@@ -71,11 +66,6 @@ typedef struct {
         bool has_tos;
 } ping_config_t;
 
-/*
- *		P I N G _ R U N
- *
- * Executes the ping utility with the provided configuration.
- */
 int ping_run(const ping_config_t *config);
 
 #endif

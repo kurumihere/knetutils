@@ -96,14 +96,6 @@ struct net_socket {
 #endif
 #endif
 
-/*
- *		N E T _ G E T _ I F A C E _ M A C
- *
- * Fetch the MAC address for a given network interface.
- * On Linux, this uses a dummy DGRAM socket to issue the SIOCGIFHWADDR ioctl.
- * On BSD/macOS, it traverses the getifaddrs() linked list looking for an
- * AF_LINK entry.
- */
 bool
 net_get_iface_mac(const char *iface, u_char *mac)
 {
@@ -155,11 +147,6 @@ out:
 #endif
 }
 
-/*
- *		N E T _ G E T _ I F A C E _ I P
- *
- * Fetch the IPv4 address for a given network interface.
- */
 bool
 net_get_iface_ip(const char *iface, u_int *ip)
 {
@@ -186,25 +173,12 @@ net_get_iface_ip(const char *iface, u_int *ip)
         return found;
 }
 
-/*
- *		N E T _ G E T _ I F A C E _ I N D E X
- *
- * Translate an interface name into its system index.
- */
 int
 net_get_iface_index(const char *iface)
 {
         return if_nametoindex(iface);
 }
 
-/*
- *		N E T _ O P E N _ R A W _ S O C K E T
- *
- * Open a raw packet socket for link-layer (L2) injection.
- * Linux: Binds an AF_PACKET socket to the specific interface index.
- * BSD/macOS: Iterates through /dev/bpf* devices to find an available Berkeley
- * Packet Filter, then binds it using BIOCSETIF and enables immediate mode.
- */
 net_socket_t *
 net_open_raw_socket(const char *iface, u_short protocol)
 {
@@ -214,7 +188,6 @@ net_open_raw_socket(const char *iface, u_short protocol)
         struct sockaddr_ll sll;
         net_socket_t *sock;
 
-        /* Open AF_PACKET socket for L2 frame injection.  */
         fd = socket(AF_PACKET, SOCK_RAW, htons(protocol));
         if (fd < 0) {
                 return NULL;
@@ -313,12 +286,6 @@ err_close:
 #endif
 }
 
-/*
- *		N E T _ O P E N _ I C M P _ S O C K E T
- *
- * Open an ICMP socket. It tries a raw socket first, and falls back
- * to an unprivileged datagram ICMP socket if permissions fail.
- */
 net_socket_t *
 net_open_icmp_socket(int family)
 {
@@ -359,11 +326,6 @@ err_close:
         return NULL;
 }
 
-/*
- *		N E T _ I S _ D G R A M
- *
- * Check if the socket is a datagram socket rather than raw.
- */
 bool
 net_is_dgram(net_socket_t *sock)
 {
@@ -373,11 +335,6 @@ net_is_dgram(net_socket_t *sock)
         return sock->is_dgram;
 }
 
-/*
- *		N E T _ C L O S E _ R A W _ S O C K E T
- *
- * Close the network socket and free any associated buffers.
- */
 void
 net_close_raw_socket(net_socket_t *sock)
 {
@@ -392,11 +349,6 @@ net_close_raw_socket(net_socket_t *sock)
         free(sock);
 }
 
-/*
- *		N E T _ S E T _ P R O M I S C U O U S
- *
- * Enable promiscuous mode on the raw socket to receive all traffic.
- */
 bool
 net_set_promiscuous(net_socket_t *sock)
 {
@@ -420,11 +372,6 @@ net_set_promiscuous(net_socket_t *sock)
 #endif
 }
 
-/*
- *		N E T _ S E N D _ P A C K E T
- *
- * Send a raw Ethernet frame over the network socket.
- */
 ssize_t
 net_send_packet(net_socket_t *sock, const void *buf, size_t len,
                 const u_char *dst_mac)
@@ -435,7 +382,7 @@ net_send_packet(net_socket_t *sock, const void *buf, size_t len,
         memset(&sll, 0, sizeof(sll));
         sll.sll_family = AF_PACKET;
         sll.sll_ifindex = sock->ifindex;
-        /* Set hardware address length to 6 bytes for Ethernet.  */
+
         sll.sll_halen = ETH_ALEN;
 
         if (dst_mac) {
@@ -451,11 +398,6 @@ net_send_packet(net_socket_t *sock, const void *buf, size_t len,
 #endif
 }
 
-/*
- *		N E T _ R E C V _ P A C K E T
- *
- * Receive a raw Ethernet frame from the socket.
- */
 ssize_t
 net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 {
@@ -488,11 +430,6 @@ net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 #endif
 }
 
-/*
- *		N E T _ S E N D _ I C M P _ P A C K E T
- *
- * Transmit an ICMP payload using the specified socket.
- */
 ssize_t
 net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
                      const struct sockaddr *dest, socklen_t dest_len)
@@ -500,11 +437,6 @@ net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
-/*
- *		N E T _ R E C V _ I C M P _ P A C K E T
- *
- * Receive an ICMP payload, retrieving the source address.
- */
 ssize_t
 net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
                      struct sockaddr_storage *src, socklen_t *src_len)
@@ -512,11 +444,6 @@ net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
-/*
- *		N E T _ G E T _ F D
- *
- * Expose the underlying file descriptor for select/poll mechanisms.
- */
 int
 net_get_fd(net_socket_t *sock)
 {
@@ -526,11 +453,6 @@ net_get_fd(net_socket_t *sock)
         return sock->fd;
 }
 
-/*
- *		N E T _ R E S O L V E _ H O S T
- *
- * Resolve a hostname or IP string to a sockaddr structure.
- */
 bool
 net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
                  socklen_t *ss_len)
@@ -551,11 +473,6 @@ net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
         return true;
 }
 
-/*
- *		N E T _ R E S O L V E _ I P V 4
- *
- * Convenience function to resolve a hostname strictly to an IPv4 integer.
- */
 bool
 net_resolve_ipv4(const char *hostname, u_int *ip)
 {
@@ -576,11 +493,6 @@ net_resolve_ipv4(const char *hostname, u_int *ip)
         return true;
 }
 
-/*
- *		N E T _ P A R S E _ M A C
- *
- * Convert a colon-separated MAC string into a byte array.
- */
 bool
 net_parse_mac(const char *mac_str, u_char *mac)
 {
@@ -599,12 +511,6 @@ net_parse_mac(const char *mac_str, u_char *mac)
         return false;
 }
 
-/*
- *		N E T _ G E T _ D E F A U L T _ G A T E W A Y
- *
- * Extract the default gateway IP for a specific interface.
- * Linux parses /proc/net/route, while BSD queries the routing sysctl.
- */
 bool
 net_get_default_gateway(const char *iface, u_int *gateway_ip)
 {
@@ -629,8 +535,6 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
                         continue;
                 }
 
-                /* Check if destination is default route (0) and matches iface
-                 */
                 if (dst == 0 && strcmp(name, iface) == 0) {
                         *gateway_ip = (u_int)gw;
                         ret = true;
@@ -711,11 +615,6 @@ out:
 #endif
 }
 
-/*
- *		N E T _ O P E N _ I P _ R A W _ S O C K E T
- *
- * Open an L3 raw IP socket.
- */
 net_socket_t *
 net_open_ip_raw_socket(int family, int protocol)
 {
@@ -746,11 +645,6 @@ err_close:
         return NULL;
 }
 
-/*
- *		N E T _ S E N D _ I P _ R A W
- *
- * Transmit an IP packet payload.
- */
 ssize_t
 net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
                 const struct sockaddr *dest, socklen_t dest_len)
@@ -758,11 +652,6 @@ net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
-/*
- *		N E T _ R E C V _ I P _ R A W
- *
- * Receive an IP packet payload.
- */
 ssize_t
 net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
                 struct sockaddr_storage *src, socklen_t *src_len)
@@ -770,12 +659,6 @@ net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
-/*
- *		N E T _ G E T _ S O U R C E _ I P _ F O R
- *
- * Determine the local source IP address that will be used to reach a
- * destination.
- */
 bool
 net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
                       struct sockaddr_storage *src, socklen_t *src_len)
@@ -802,7 +685,6 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
                 }
         }
 
-        /* Perform UDP connect to route target and determine source IP.  */
         if (connect(sock, (const struct sockaddr *)&dst_copy, dst_len) < 0) {
                 goto out;
         }
@@ -818,11 +700,6 @@ out:
         return ret;
 }
 
-/*
- *		N E T _ C H E C K S U M
- *
- * Calculate the standard 16-bit one's complement Internet checksum.
- */
 u_short
 net_checksum(const void *b, int len)
 {

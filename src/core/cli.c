@@ -40,11 +40,6 @@
 
 #define OPT_STR_MAX 32
 
-/*
- *		C L I _ P R I N T _ H E L P
- *
- * Render the usage and options help menu for a CLI tool.
- */
 void
 cli_print_help(const cli_app_t *app)
 {
@@ -62,13 +57,11 @@ cli_print_help(const cli_app_t *app)
                 return;
         }
 
-        /* Iterate until null sentinel option is reached.  */
         for (i = 0; app->options[i].short_opt != '\0'; i++) {
                 const cli_option_t *opt = &app->options[i];
                 char opt_str[OPT_STR_MAX];
                 const char *desc;
 
-                /* Format the CLI option string.  */
                 if (opt->arg_name) {
                         snprintf(opt_str, sizeof(opt_str), "-%c <%s>",
                                  opt->short_opt, opt->arg_name);
@@ -79,8 +72,6 @@ cli_print_help(const cli_app_t *app)
 
                 fprintf(stderr, "  %-14s  ", opt_str);
 
-                /* Print the description, handling newlines for proper
-                 * indentation */
                 desc = opt->description;
                 while (*desc) {
                         if (*desc == '\n') {

@@ -57,11 +57,6 @@ static const cli_option_t pscan_options[] = {
     {'I', "iface/ip", "bind to a specific interface or IP address"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
-/*
- *		P R I N T _ U S A G E
- *
- * Logic for print_usage.
- */
 
 static void
 print_usage(const char *prog_name)
@@ -72,11 +67,6 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
-/*
- *		P S C A N _ C L I _ M A I N
- *
- * Parse arguments and execute the pscan tool.
- */
 int
 pscan_cli_main(int c, char **av)
 {
@@ -95,16 +85,14 @@ pscan_cli_main(int c, char **av)
         while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
                 switch (ch) {
                 case 'u':
-                        /* Enable UDP port scanning instead of TCP SYN scanning.
-                         */
+
                         config.udp = true;
                         break;
                 case 's':
                         config.banner_grab = true;
                         break;
                 case 'O':
-                        /* Enable OS fingerprinting via TCP/IP header
-                         * inspection.  */
+
                         config.os_fingerprint = true;
                         break;
                 case 'j':
@@ -120,8 +108,7 @@ pscan_cli_main(int c, char **av)
                         config.family = AF_INET6;
                         break;
                 case 'p': {
-                        /* Extract start and end port numbers for the scan
-                         * range.  */
+
                         char *dash = strchr(optarg, '-');
                         if (dash) {
                                 *dash = '\0';

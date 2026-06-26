@@ -64,11 +64,6 @@ static const cli_option_t ping_options[] = {
     {'q', NULL, "quiet output"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
-/*
- *		P R I N T _ U S A G E
- *
- * Logic for print_usage.
- */
 
 static void
 print_usage(const char *prog_name)
@@ -79,11 +74,6 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
-/*
- *		P I N G _ C L I _ M A I N
- *
- * Parse arguments and execute the ping tool.
- */
 int
 ping_cli_main(int c, char **av)
 {
@@ -104,7 +94,7 @@ ping_cli_main(int c, char **av)
         while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
                 switch (ch) {
                 case '4':
-                        /* Force IPv4 address resolution and socket creation. */
+
                         config.family = AF_INET;
                         break;
                 case '6':
@@ -146,8 +136,7 @@ ping_cli_main(int c, char **av)
                         config.payload_size = (u_int)atoi(optarg);
                         break;
                 case 'p': {
-                        /* Parse hex pattern to construct custom ICMP payload.
-                         */
+
                         size_t len = strlen(optarg);
                         size_t i;
                         if (len > 32)
@@ -161,8 +150,7 @@ ping_cli_main(int c, char **av)
                         break;
                 }
                 case 'Q':
-                        /* Set IP Type of Service (ToS) / Differentiated
-                         * Services Field.  */
+
                         config.tos = (int)strtol(optarg, NULL, 0);
                         config.has_tos = true;
                         break;

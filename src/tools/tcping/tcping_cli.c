@@ -57,11 +57,6 @@ static const cli_option_t tcping_options[] = {
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
 
-/*
- *		P R I N T _ U S A G E
- *
- * Print the usage instructions for the tcping CLI utility.
- */
 static void
 print_usage(const char *prog_name)
 {
@@ -72,11 +67,6 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
-/*
- *		T C P I N G _ C L I _ M A I N
- *
- * Parse arguments and execute the tcping tool.
- */
 int
 tcping_cli_main(int c, char **av)
 {
@@ -99,11 +89,11 @@ tcping_cli_main(int c, char **av)
         while ((ch = getopt(c, av, "46c:W:i:I:qh")) != -1) {
                 switch (ch) {
                 case '4':
-                        /* Force IPv4 address family.  */
+
                         config.family = AF_INET;
                         break;
                 case '6':
-                        /* Force IPv6 address family.  */
+
                         config.family = AF_INET6;
                         break;
                 case 'c':
@@ -152,7 +142,6 @@ tcping_cli_main(int c, char **av)
                 /* NOT REACHED */
         }
 
-        /* Resolve target hostname to IP address.  */
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
@@ -161,7 +150,6 @@ tcping_cli_main(int c, char **av)
 
         config.family = config.target_addr.ss_family;
 
-        /* Raw sockets require root capabilities.  */
         if (getuid() != 0) {
                 log_warn(
                     "tcping requires root privileges to open raw sockets.");

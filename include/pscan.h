@@ -41,11 +41,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-/*
- *		P S C A N _ C O N F I G
- *
- * Contains the configuration parameters for running a port scan operation.
- */
 typedef struct {
         u_short start_port;
         u_short end_port;
@@ -62,11 +57,6 @@ typedef struct {
         bool os_fingerprint;
 } pscan_config_t;
 
-/*
- *		P S C A N _ R U N
- *
- * Executes the pscan utility with the provided configuration.
- */
 int pscan_run(const pscan_config_t *config);
 
 #endif

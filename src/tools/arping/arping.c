@@ -68,11 +68,6 @@
 
 static volatile sig_atomic_t keep_running = 1;
 
-/*
- *		H A N D L E _ S I G I N T
- *
- * Signal handler for SIGINT.
- */
 static void
 handle_sigint(int sig)
 {
@@ -80,11 +75,6 @@ handle_sigint(int sig)
         keep_running = 0;
 }
 
-/*
- *		P R I N T _ M A C
- *
- * Print a MAC address in hex format.
- */
 static void
 print_mac(const u_char *mac)
 {
@@ -105,11 +95,6 @@ typedef struct {
         struct in_addr source_in;
 } arping_state_t;
 
-/*
- *		S E T U P _ A R P I N G _ S O C K E T
- *
- * Setup raw socket for arping.
- */
 static int
 setup_arping_socket(const arping_config_t *config, arping_state_t *st)
 {
@@ -129,11 +114,6 @@ setup_arping_socket(const arping_config_t *config, arping_state_t *st)
         return 0;
 }
 
-/*
- *		I N I T _ A R P I N G _ S T A T E
- *
- * Initialize arping state structure.
- */
 static void
 init_arping_state(const arping_config_t *config, arping_state_t *st)
 {
@@ -150,11 +130,6 @@ init_arping_state(const arping_config_t *config, arping_state_t *st)
         memcpy(st->current_target_mac, bc, ETH_ALEN);
 }
 
-/*
- *		S E N D _ A R P I N G _ P R O B E
- *
- * Transmit an ARP request or reply to the network.
- */
 static bool
 send_arping_probe(const arping_config_t *config, arping_state_t *st)
 {
@@ -163,12 +138,10 @@ send_arping_probe(const arping_config_t *config, arping_state_t *st)
         struct ether_arp *arp =
             (struct ether_arp *)(buffer + sizeof(struct ether_header));
 
-        /* Construct Ethernet header for ARP frame.  */
         memcpy(eth->ether_dhost, st->current_target_mac, ETH_ALEN);
         memcpy(eth->ether_shost, config->source_mac, ETH_ALEN);
         eth->ether_type = htons(ETH_P_ARP);
 
-        /* Set hardware type to Ethernet and protocol to IPv4.  */
         arp->arp_hrd = htons(ARPHRD_ETHER);
         arp->arp_pro = htons(ETH_P_IP);
         arp->arp_hln = ETH_ALEN;
@@ -198,11 +171,6 @@ send_arping_probe(const arping_config_t *config, arping_state_t *st)
         return true;
 }
 
-/*
- *		H A N D L E _ A R P _ R E P L Y
- *
- * Process an incoming ARP reply.
- */
 static bool
 handle_arp_reply(const arping_config_t *config, arping_state_t *st,
                  struct ether_arp *r_arp, u_int64_t rtt)
@@ -237,11 +205,6 @@ handle_arp_reply(const arping_config_t *config, arping_state_t *st,
         return true;
 }
 
-/*
- *		R E C V _ A R P I N G _ R E P L Y
- *
- * Listen for incoming ARP replies and process them.
- */
 static bool
 recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                   u_int64_t expire, u_int64_t send_time)
@@ -284,7 +247,7 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                 }
 
                 r_eth = (struct ether_header *)recv_buf;
-                /* Drop non-ARP frames from the raw socket.  */
+
                 if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
                         continue;
                 }
@@ -310,11 +273,6 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
         return false;
 }
 
-/*
- *		P R I N T _ A R P I N G _ S T A T S
- *
- * Print final statistics for arping.
- */
 static void
 print_arping_stats(const arping_config_t *config, const arping_state_t *st)
 {
@@ -337,11 +295,6 @@ print_arping_stats(const arping_config_t *config, const arping_state_t *st)
         }
 }
 
-/*
- *		A R P I N G _ R U N
- *
- * Main entry point for the arping utility.
- */
 int
 arping_run(const arping_config_t *config)
 {

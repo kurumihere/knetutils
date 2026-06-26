@@ -72,11 +72,6 @@
 
 static volatile sig_atomic_t keep_running = 1;
 
-/*
- *		H A N D L E _ S I G I N T
- *
- * Signal handler for SIGINT, gracefully stops the capture loop.
- */
 static void
 handle_sigint(int sig)
 {
@@ -113,11 +108,6 @@ typedef struct {
         socklen_t src_addr_len;
 } tcping_state_t;
 
-/*
- *		S E T U P _ T C P I N G _ S O C K E T
- *
- * Open raw TCP socket and handle optional source binding.
- */
 static void
 setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
 {
@@ -164,11 +154,6 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
         }
 }
 
-/*
- *		I N I T _ T C P I N G _ S T A T E
- *
- * Initialize state structure and resolve source IP for target.
- */
 static void
 init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
 {
@@ -190,11 +175,6 @@ init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
         st->seq = INITIAL_SEQ;
 }
 
-/*
- *		S E N D _ T C P I N G _ P R O B E
- *
- * Construct and emit a raw TCP SYN packet with pseudo-header checksum.
- */
 static void
 send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
 {
@@ -243,7 +223,6 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
         csum_len += sizeof(tcph);
 
-        /* Calculate TCP checksum including pseudo header.  */
         tcph.th_sum = net_checksum(csum_buf, csum_len);
 
         if (net_send_ip_raw(st->sock, &tcph, sizeof(tcph),
@@ -254,11 +233,6 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         st->sent++;
 }
 
-/*
- *		P R I N T _ T C P I N G _ R E P L Y
- *
- * Log received SYN-ACK or RST messages.
- */
 static void
 print_tcping_reply(const tcping_config_t *config, const tcping_state_t *st,
                    const struct tcphdr *r_tcph, u_int64_t rtt)
@@ -271,22 +245,16 @@ print_tcping_reply(const tcping_config_t *config, const tcping_state_t *st,
 
         format_time(rtt, NULL, time_buf, sizeof(time_buf));
 
-        /* SYN-ACK received indicating open port.  */
         if ((r_tcph->th_flags & TH_SYN) && (r_tcph->th_flags & TH_ACK)) {
                 printf("Reply from %s:%u (SYN-ACK) time=%s\n", st->target_str,
                        config->port, time_buf);
-                /* RST received indicating closed port.  */
+
         } else if (r_tcph->th_flags & TH_RST) {
                 printf("Reply from %s:%u (RST) time=%s\n", st->target_str,
                        config->port, time_buf);
         }
 }
 
-/*
- *		R E C V _ T C P I N G _ R E P L Y
- *
- * Monitor incoming packets for SYN-ACK or RST segments.
- */
 static bool
 recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                   u_int64_t wait_until, u_int64_t send_time)
@@ -332,7 +300,7 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
 
                 if (config->family == AF_INET) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
-                        /* Calculate IPv4 header length from IHL field.  */
+
                         hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
                 }
 
@@ -363,11 +331,6 @@ out:
         return ret_val;
 }
 
-/*
- *		P R I N T _ T C P I N G _ S T A T S
- *
- * Display final statistics for the ping session.
- */
 static void
 print_tcping_stats(const tcping_config_t *config, const tcping_state_t *st)
 {
@@ -390,11 +353,6 @@ print_tcping_stats(const tcping_config_t *config, const tcping_state_t *st)
             st->sent, st->received, loss_pct);
 }
 
-/*
- *		T C P I N G _ R U N
- *
- * Main TCP ping loop.
- */
 int
 tcping_run(const tcping_config_t *config)
 {

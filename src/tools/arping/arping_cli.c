@@ -64,11 +64,6 @@ static const cli_option_t arping_options[] = {
     {'q', NULL, "quiet output"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
-/*
- *		P R I N T _ U S A G E
- *
- * Logic for print_usage.
- */
 
 static void
 print_usage(const char *prog_name)
@@ -78,11 +73,7 @@ print_usage(const char *prog_name)
                          .options = arping_options};
         cli_print_help(&app);
 }
-/*
- *		A R P I N G _ C L I _ M A I N
- *
- * Parse arguments and execute the arping tool.
- */
+
 int
 arping_cli_main(int c, char **av)
 {
@@ -171,7 +162,7 @@ arping_cli_main(int c, char **av)
         }
 
         if (config.dad) {
-                /* Use unspecified source IP for Duplicate Address Detection. */
+
                 config.source_ip = 0;
         } else if (source_ip_str) {
                 if (!net_resolve_ipv4(source_ip_str, &config.source_ip)) {
@@ -188,7 +179,7 @@ arping_cli_main(int c, char **av)
         }
 
         if (config.gateway) {
-                /* Attempt to extract gateway IP from local routing table.  */
+
                 if (!net_get_default_gateway(config.iface, &config.target_ip)) {
                         die("Failed to automatically determine the default "
                             "gateway");

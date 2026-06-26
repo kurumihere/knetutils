@@ -48,26 +48,14 @@ int tcping_cli_main(int c, char **av);
 int traceroute_cli_main(int c, char **av);
 int pscan_cli_main(int c, char **av);
 
-/*
- *		G E T _ B A S E N A M E
- *
- * Extract the file name from a given path.
- */
 static const char *
 get_basename(const char *path)
 {
         const char *base = strrchr(path, '/');
 
-        /* Return the character after the slash, or the whole path if no slash
-         */
         return base ? base + 1 : path;
 }
 
-/*
- *		P R I N T _ M A I N _ U S A G E
- *
- * Display the main help menu for the suite.
- */
 static void
 print_main_usage(void)
 {
@@ -96,11 +84,6 @@ print_main_usage(void)
                         "a command.\n");
 }
 
-/*
- *		M A I N
- *
- * The main multiplexer entry point for all tools.
- */
 int
 main(int c, char **av)
 {
@@ -113,18 +96,14 @@ main(int c, char **av)
 
         prog_name = get_basename(*av);
 
-        /*
-         * Check if the program was invoked by an alias.
-         * If the binary name matches a command, dispatch immediately.
-         */
         if (strcmp(prog_name, "arping") == 0) {
                 return arping_cli_main(c, av);
-                /* Dispatch to ICMP ECHO_REQUEST utility.  */
+
         } else if (strcmp(prog_name, "ping") == 0) {
                 return ping_cli_main(c, av);
         } else if (strcmp(prog_name, "sniff") == 0) {
                 return sniff_cli_main(c, av);
-                /* Dispatch to TCP SYN latency utility.  */
+
         } else if (strcmp(prog_name, "tcping") == 0) {
                 return tcping_cli_main(c, av);
         } else if (strcmp(prog_name, "traceroute") == 0) {
@@ -150,7 +129,7 @@ main(int c, char **av)
                 return tcping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "traceroute") == 0) {
                 return traceroute_cli_main(c - 1, av + 1);
-                /* Dispatch to TCP SYN and UDP port scanner.  */
+
         } else if (strcmp(cmd, "pscan") == 0) {
                 return pscan_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
