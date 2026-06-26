@@ -1,0 +1,39 @@
+.Dd June 26, 2026
+.Dt PSCAN 8
+.Os
+.Sh NAME
+.Nm pscan
+.Nd fast asynchronous TCP SYN and UDP port scanner
+.Sh SYNOPSIS
+.Nm
+.Op Fl 46u
+.Op Fl I Ar iface
+.Op Fl p Ar ports
+.Op Fl W Ar timeout
+.Ar destination
+.Sh DESCRIPTION
+The
+.Nm
+utility is a fast port scanner that uses raw sockets to asynchronously discover open ports on a target host.
+By default, it performs a TCP SYN scan, waiting for SYN-ACK responses.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl 4
+Use IPv4 only.
+.It Fl 6
+Use IPv6 only.
+.It Fl I Ar iface
+Bind to a specific interface or source IP address.
+.It Fl p Ar ports
+Specify the port range to scan. Can be a single port (e.g., 80) or a range (e.g., 1-1024).
+.It Fl u
+Perform a UDP scan instead of a TCP SYN scan. It sends empty datagrams and relies on ICMP Port Unreachable responses to filter out closed ports.
+.It Fl W Ar timeout
+Time to wait for a response, in seconds.
+.El
+.Sh AUTHORS
+The
+.Nm
+utility and the knetutils suite were written by
+.An kurumi .
