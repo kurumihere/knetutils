@@ -42,15 +42,15 @@
 #include <sys/types.h>
 
 typedef struct {
-        u_short port;
-        u_int count;
-        u_int64_t timeout_ns;
-        u_int64_t interval_ns;
-        struct sockaddr_storage target_addr;
-        socklen_t target_addr_len;
-        int family;
-        const char *bind_iface;
-        bool quiet;
+    u_short port;
+    u_int count;
+    u_int64_t timeout_ns;
+    u_int64_t interval_ns;
+    struct sockaddr_storage target_addr;
+    socklen_t target_addr_len;
+    int family;
+    const char *bind_iface;
+    bool quiet;
 } tcping_config_t;
 
 int tcping_run(const tcping_config_t *config);

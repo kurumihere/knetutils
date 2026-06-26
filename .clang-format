@@ -1,6 +1,6 @@
 UseTab: Never
-IndentWidth: 8
-TabWidth: 8
+IndentWidth: 4
+TabWidth: 4
 ContinuationIndentWidth: 4
 ColumnLimit: 80
 PointerAlignment: Right

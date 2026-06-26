@@ -59,62 +59,62 @@ static const cli_option_t sniff_options[] = {
 static void
 print_usage(const char *prog_name)
 {
-        cli_app_t app = {.prog_name = prog_name,
-                         .usage_args = "[options]",
-                         .options = sniff_options};
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options]",
+                     .options = sniff_options};
 
-        cli_print_help(&app);
+    cli_print_help(&app);
 }
 
 int
 sniff_cli_main(int c, char **av)
 {
-        sniff_config_t config;
-        int ch;
-        const char *prog_name;
-        int ret = EXIT_SUCCESS;
+    sniff_config_t config;
+    int ch;
+    const char *prog_name;
+    int ret = EXIT_SUCCESS;
 
-        prog_name = *av;
+    prog_name = *av;
 
-        memset(&config, 0, sizeof(config));
+    memset(&config, 0, sizeof(config));
 
-        while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
-                switch (ch) {
-                case 'I':
-                        config.iface = optarg;
-                        break;
-                case 'c':
-                        config.max_packets = atoi(optarg);
-                        break;
-                case 'w':
+    while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
+        switch (ch) {
+        case 'I':
+            config.iface = optarg;
+            break;
+        case 'c':
+            config.max_packets = atoi(optarg);
+            break;
+        case 'w':
 
-                        config.pcap_file = optarg;
-                        break;
-                case 'v':
-                        config.verbosity++;
-                        break;
-                case 'h':
-                        print_usage(prog_name);
-                        goto out;
-                default:
-                        print_usage(prog_name);
-                        ret = EXIT_FAILURE;
-                        goto out;
-                }
+            config.pcap_file = optarg;
+            break;
+        case 'v':
+            config.verbosity++;
+            break;
+        case 'h':
+            print_usage(prog_name);
+            goto out;
+        default:
+            print_usage(prog_name);
+            ret = EXIT_FAILURE;
+            goto out;
         }
+    }
 
-        if (!config.iface) {
-                log_err("Interface is required (-I)");
-                print_usage(prog_name);
-                ret = EXIT_FAILURE;
-                goto out;
-        }
+    if (!config.iface) {
+        log_err("Interface is required (-I)");
+        print_usage(prog_name);
+        ret = EXIT_FAILURE;
+        goto out;
+    }
 
-        if (getuid() != 0) {
-                log_warn("sniff requires root privileges to open raw sockets.");
-        }
+    if (getuid() != 0) {
+        log_warn("sniff requires root privileges to open raw sockets.");
+    }
 
-        ret = sniff_run(&config);
+    ret = sniff_run(&config);
 out:
-        return ret;
+    return ret;
 }

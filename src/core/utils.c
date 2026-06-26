@@ -43,106 +43,103 @@
 void
 log_err(const char *fmt, ...)
 {
-        va_list args;
+    va_list args;
 
-        va_start(args, fmt);
-        fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
-        vfprintf(stderr, fmt, args);
-        fprintf(stderr, "\n");
-        va_end(args);
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
 void
 log_warn(const char *fmt, ...)
 {
-        va_list args;
+    va_list args;
 
-        va_start(args, fmt);
-        fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
-        vfprintf(stderr, fmt, args);
-        fprintf(stderr, "\n");
-        va_end(args);
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
 void
 log_info(const char *fmt, ...)
 {
-        va_list args;
+    va_list args;
 
-        va_start(args, fmt);
-        fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
-        vfprintf(stdout, fmt, args);
-        fprintf(stdout, "\n");
-        va_end(args);
+    va_start(args, fmt);
+    fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
+    vfprintf(stdout, fmt, args);
+    fprintf(stdout, "\n");
+    va_end(args);
 }
 
 void
 die(const char *fmt, ...)
 {
-        va_list args;
+    va_list args;
 
-        va_start(args, fmt);
-        fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
-        vfprintf(stderr, fmt, args);
-        fprintf(stderr, "\n");
-        va_end(args);
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 
-        exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
 }
 
 u_int64_t
 get_time_ns(void)
 {
-        struct timespec ts;
+    struct timespec ts;
 
-        if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-                die("clock_gettime failed");
-        }
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        die("clock_gettime failed");
+    }
 
-        return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
+    return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
 }
 
 u_int64_t
 time_diff_ns(u_int64_t start, u_int64_t end)
 {
 
-        if (end < start) {
-                return 0;
-        }
-        return end - start;
+    if (end < start) {
+        return 0;
+    }
+    return end - start;
 }
 
 const char *
 format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
             size_t buf_size)
 {
-        if (unit_choice) {
-                if (strcmp(unit_choice, "ns") == 0) {
+    if (unit_choice) {
+        if (strcmp(unit_choice, "ns") == 0) {
 
-                        snprintf(buf, buf_size, "%llu ns",
-                                 (unsigned long long)time_ns);
-                        return buf;
-                } else if (strcmp(unit_choice, "us") == 0 ||
-                           strcmp(unit_choice, "μs") == 0) {
-                        snprintf(buf, buf_size, "%.3f μs",
-                                 (double)time_ns / (double)NS_PER_US);
-                        return buf;
-                } else if (strcmp(unit_choice, "ms") == 0) {
-                        snprintf(buf, buf_size, "%.3f ms",
-                                 (double)time_ns / (double)NS_PER_MS);
-                        return buf;
-                }
+            snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+            return buf;
+        } else if (strcmp(unit_choice, "us") == 0 ||
+                   strcmp(unit_choice, "μs") == 0) {
+            snprintf(buf, buf_size, "%.3f μs",
+                     (double)time_ns / (double)NS_PER_US);
+            return buf;
+        } else if (strcmp(unit_choice, "ms") == 0) {
+            snprintf(buf, buf_size, "%.3f ms",
+                     (double)time_ns / (double)NS_PER_MS);
+            return buf;
         }
+    }
 
-        if (time_ns < NS_PER_US) {
-                snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
-        } else if (time_ns < NS_PER_MS) {
-                snprintf(buf, buf_size, "%.3f μs",
-                         (double)time_ns / (double)NS_PER_US);
-        } else {
-                snprintf(buf, buf_size, "%.3f ms",
-                         (double)time_ns / (double)NS_PER_MS);
-        }
+    if (time_ns < NS_PER_US) {
+        snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+    } else if (time_ns < NS_PER_MS) {
+        snprintf(buf, buf_size, "%.3f μs", (double)time_ns / (double)NS_PER_US);
+    } else {
+        snprintf(buf, buf_size, "%.3f ms", (double)time_ns / (double)NS_PER_MS);
+    }
 
-        return buf;
+    return buf;
 }

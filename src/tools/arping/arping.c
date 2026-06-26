@@ -67,318 +67,304 @@ static volatile sig_atomic_t keep_running = 1;
 static void
 handle_sigint(int sig)
 {
-        (void)sig;
-        keep_running = 0;
+    (void)sig;
+    keep_running = 0;
 }
 
 static void
 print_mac(const u_char *mac)
 {
-        printf("%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3],
-               mac[4], mac[5]);
+    printf("%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3],
+           mac[4], mac[5]);
 }
 
 typedef struct {
-        u_int sent;
-        u_int received;
-        net_socket_t *sock;
+    u_int sent;
+    u_int received;
+    net_socket_t *sock;
 
-        u_char current_target_mac[ETH_ALEN];
-        u_char target_mac_broadcast[ETH_ALEN];
-        u_char target_mac_zero[ETH_ALEN];
+    u_char current_target_mac[ETH_ALEN];
+    u_char target_mac_broadcast[ETH_ALEN];
+    u_char target_mac_zero[ETH_ALEN];
 
-        struct in_addr target_in;
-        struct in_addr source_in;
+    struct in_addr target_in;
+    struct in_addr source_in;
 } arping_state_t;
 
 static int
 setup_arping_socket(const arping_config_t *config, arping_state_t *st)
 {
-        st->sock = open_raw_socket(config->iface, ETH_P_ARP);
-        if (!st->sock) {
-                log_err("Failed to open raw socket on interface %s",
-                        config->iface);
-                return -1;
-        }
+    st->sock = open_raw_socket(config->iface, ETH_P_ARP);
+    if (!st->sock) {
+        log_err("Failed to open raw socket on interface %s", config->iface);
+        return -1;
+    }
 
-        if (config->dad) {
-                if (!set_promiscuous(st->sock)) {
-                        log_warn("Failed to set promiscuous mode for DAD. "
-                                 "Detection might be incomplete.");
-                }
+    if (config->dad) {
+        if (!set_promiscuous(st->sock)) {
+            log_warn("Failed to set promiscuous mode for DAD. "
+                     "Detection might be incomplete.");
         }
-        return 0;
+    }
+    return 0;
 }
 
 static void
 init_arping_state(const arping_config_t *config, arping_state_t *st)
 {
-        u_char bc[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-        u_char zero[ETH_ALEN] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    u_char bc[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    u_char zero[ETH_ALEN] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-        memset(st, 0, sizeof(*st));
+    memset(st, 0, sizeof(*st));
 
-        st->target_in.s_addr = config->target_ip;
-        st->source_in.s_addr = config->source_ip;
+    st->target_in.s_addr = config->target_ip;
+    st->source_in.s_addr = config->source_ip;
 
-        memcpy(st->target_mac_broadcast, bc, ETH_ALEN);
-        memcpy(st->target_mac_zero, zero, ETH_ALEN);
-        memcpy(st->current_target_mac, bc, ETH_ALEN);
+    memcpy(st->target_mac_broadcast, bc, ETH_ALEN);
+    memcpy(st->target_mac_zero, zero, ETH_ALEN);
+    memcpy(st->current_target_mac, bc, ETH_ALEN);
 }
 
 static bool
 send_arping_probe(const arping_config_t *config, arping_state_t *st)
 {
-        u_char buffer[sizeof(struct ether_header) + sizeof(struct ether_arp)];
-        struct ether_header *eth = (struct ether_header *)buffer;
-        struct ether_arp *arp =
-            (struct ether_arp *)(buffer + sizeof(struct ether_header));
+    u_char buffer[sizeof(struct ether_header) + sizeof(struct ether_arp)];
+    struct ether_header *eth = (struct ether_header *)buffer;
+    struct ether_arp *arp =
+        (struct ether_arp *)(buffer + sizeof(struct ether_header));
 
-        memcpy(eth->ether_dhost, st->current_target_mac, ETH_ALEN);
-        memcpy(eth->ether_shost, config->source_mac, ETH_ALEN);
-        eth->ether_type = htons(ETH_P_ARP);
+    memcpy(eth->ether_dhost, st->current_target_mac, ETH_ALEN);
+    memcpy(eth->ether_shost, config->source_mac, ETH_ALEN);
+    eth->ether_type = htons(ETH_P_ARP);
 
-        arp->arp_hrd = htons(ARPHRD_ETHER);
-        arp->arp_pro = htons(ETH_P_IP);
-        arp->arp_hln = ETH_ALEN;
-        arp->arp_pln = IPV4_ALEN;
-        arp->arp_op =
-            config->use_reply ? htons(ARPOP_REPLY) : htons(ARPOP_REQUEST);
+    arp->arp_hrd = htons(ARPHRD_ETHER);
+    arp->arp_pro = htons(ETH_P_IP);
+    arp->arp_hln = ETH_ALEN;
+    arp->arp_pln = IPV4_ALEN;
+    arp->arp_op = config->use_reply ? htons(ARPOP_REPLY) : htons(ARPOP_REQUEST);
 
-        memcpy(arp->arp_sha, config->source_mac, ETH_ALEN);
-        memcpy(arp->arp_spa, &config->source_ip, IPV4_ALEN);
+    memcpy(arp->arp_sha, config->source_mac, ETH_ALEN);
+    memcpy(arp->arp_spa, &config->source_ip, IPV4_ALEN);
 
-        if (memcmp(st->current_target_mac, st->target_mac_broadcast,
-                   ETH_ALEN) == 0) {
-                memcpy(arp->arp_tha, st->target_mac_zero, ETH_ALEN);
-        } else {
-                memcpy(arp->arp_tha, st->current_target_mac, ETH_ALEN);
-        }
+    if (memcmp(st->current_target_mac, st->target_mac_broadcast, ETH_ALEN) ==
+        0) {
+        memcpy(arp->arp_tha, st->target_mac_zero, ETH_ALEN);
+    } else {
+        memcpy(arp->arp_tha, st->current_target_mac, ETH_ALEN);
+    }
 
-        memcpy(arp->arp_tpa, &config->target_ip, IPV4_ALEN);
+    memcpy(arp->arp_tpa, &config->target_ip, IPV4_ALEN);
 
-        if (send_packet(st->sock, buffer, sizeof(buffer),
-                        st->current_target_mac) < 0) {
-                log_err("Failed to send ARP packet");
-                return false;
-        }
+    if (send_packet(st->sock, buffer, sizeof(buffer), st->current_target_mac) <
+        0) {
+        log_err("Failed to send ARP packet");
+        return false;
+    }
 
-        st->sent++;
-        return true;
+    st->sent++;
+    return true;
 }
 
 static bool
 handle_arp_reply(const arping_config_t *config, arping_state_t *st,
                  struct ether_arp *r_arp, u_int64_t rtt)
 {
-        u_int reply_spa;
-        memcpy(&reply_spa, r_arp->arp_spa, IPV4_ALEN);
+    u_int reply_spa;
+    memcpy(&reply_spa, r_arp->arp_spa, IPV4_ALEN);
 
-        if (reply_spa != config->target_ip) {
-                return false;
+    if (reply_spa != config->target_ip) {
+        return false;
+    }
+
+    if (!config->quiet) {
+        if (config->cisco_style) {
+            printf("!");
+            fflush(stdout);
+        } else {
+            char time_buf[64];
+            format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
+            printf("Unicast reply from %s [", inet_ntoa(st->target_in));
+            print_mac(r_arp->arp_sha);
+            printf("]  %s\n", time_buf);
         }
+    }
 
-        if (!config->quiet) {
-                if (config->cisco_style) {
-                        printf("!");
-                        fflush(stdout);
-                } else {
-                        char time_buf[64];
-                        format_time(rtt, config->time_unit, time_buf,
-                                    sizeof(time_buf));
-                        printf("Unicast reply from %s [",
-                               inet_ntoa(st->target_in));
-                        print_mac(r_arp->arp_sha);
-                        printf("]  %s\n", time_buf);
-                }
-        }
+    if (!config->keep_broadcast) {
+        memcpy(st->current_target_mac, r_arp->arp_sha, ETH_ALEN);
+    }
 
-        if (!config->keep_broadcast) {
-                memcpy(st->current_target_mac, r_arp->arp_sha, ETH_ALEN);
-        }
-
-        st->received++;
-        return true;
+    st->received++;
+    return true;
 }
 
 static bool
 recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                   u_int64_t expire, u_int64_t send_time)
 {
-        struct pollfd pfd;
-        pfd.fd = get_socket_fd(st->sock);
-        pfd.events = POLLIN;
+    struct pollfd pfd;
+    pfd.fd = get_socket_fd(st->sock);
+    pfd.events = POLLIN;
 
-        while (get_time_ns() < expire && keep_running) {
-                int64_t timeout_ns;
-                int timeout_ms;
-                int ret;
-                __attribute__((aligned(8))) u_char recv_buf[4096];
-                ssize_t n;
-                struct ether_header *r_eth;
-                struct ether_arp *r_arp;
-                u_int64_t recv_time;
-                u_int64_t rtt;
+    while (get_time_ns() < expire && keep_running) {
+        int64_t timeout_ns;
+        int timeout_ms;
+        int ret;
+        __attribute__((aligned(8))) u_char recv_buf[4096];
+        ssize_t n;
+        struct ether_header *r_eth;
+        struct ether_arp *r_arp;
+        u_int64_t recv_time;
+        u_int64_t rtt;
 
-                timeout_ns = expire - get_time_ns();
-                if (timeout_ns <= 0)
-                        break;
-                timeout_ms = timeout_ns / NS_PER_MS;
+        timeout_ns = expire - get_time_ns();
+        if (timeout_ns <= 0)
+            break;
+        timeout_ms = timeout_ns / NS_PER_MS;
 
-                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-                if (ret <= 0) {
-                        break;
-                }
-
-                if (!(pfd.revents & POLLIN))
-                        continue;
-
-                n = recv_packet(st->sock, recv_buf, sizeof(recv_buf));
-                if (n < 0)
-                        continue;
-
-                if ((size_t)n <
-                    sizeof(struct ether_header) + sizeof(struct ether_arp)) {
-                        continue;
-                }
-
-                r_eth = (struct ether_header *)recv_buf;
-
-                if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
-                        continue;
-                }
-
-                r_arp = (struct ether_arp *)(recv_buf +
-                                             sizeof(struct ether_header));
-                if (ntohs(r_arp->arp_op) != ARPOP_REPLY) {
-                        continue;
-                }
-
-                recv_time = get_time_ns();
-                rtt = time_diff_ns(send_time, recv_time);
-
-                if (handle_arp_reply(config, st, r_arp, rtt)) {
-                        if (config->dad || config->count == 1 ||
-                            config->quit_on_reply) {
-                                keep_running = false;
-                        }
-                        return true;
-                }
+        ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+        if (ret <= 0) {
+            break;
         }
 
-        return false;
+        if (!(pfd.revents & POLLIN))
+            continue;
+
+        n = recv_packet(st->sock, recv_buf, sizeof(recv_buf));
+        if (n < 0)
+            continue;
+
+        if ((size_t)n <
+            sizeof(struct ether_header) + sizeof(struct ether_arp)) {
+            continue;
+        }
+
+        r_eth = (struct ether_header *)recv_buf;
+
+        if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
+            continue;
+        }
+
+        r_arp = (struct ether_arp *)(recv_buf + sizeof(struct ether_header));
+        if (ntohs(r_arp->arp_op) != ARPOP_REPLY) {
+            continue;
+        }
+
+        recv_time = get_time_ns();
+        rtt = time_diff_ns(send_time, recv_time);
+
+        if (handle_arp_reply(config, st, r_arp, rtt)) {
+            if (config->dad || config->count == 1 || config->quit_on_reply) {
+                keep_running = false;
+            }
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void
 print_arping_stats(const arping_config_t *config, const arping_state_t *st)
 {
-        if (config->quiet)
-                return;
+    if (config->quiet)
+        return;
 
-        if (config->cisco_style) {
-                printf("\nSuccess rate is %u percent (%u/%u)\n",
-                       st->sent == 0 ? 0 : ((st->received * 100) / st->sent),
-                       st->received, st->sent);
-        } else {
-                printf("\n--- %s arping statistics ---\n",
-                       inet_ntoa(st->target_in));
-                printf("%u packets transmitted, %u packets received, %u%% "
-                       "packet loss\n",
-                       st->sent, st->received,
-                       st->sent == 0
-                           ? 0
-                           : ((st->sent - st->received) * 100 / st->sent));
-        }
+    if (config->cisco_style) {
+        printf("\nSuccess rate is %u percent (%u/%u)\n",
+               st->sent == 0 ? 0 : ((st->received * 100) / st->sent),
+               st->received, st->sent);
+    } else {
+        printf("\n--- %s arping statistics ---\n", inet_ntoa(st->target_in));
+        printf("%u packets transmitted, %u packets received, %u%% "
+               "packet loss\n",
+               st->sent, st->received,
+               st->sent == 0 ? 0
+                             : ((st->sent - st->received) * 100 / st->sent));
+    }
 }
 
 int
 arping_run(const arping_config_t *config)
 {
-        arping_state_t st;
-        struct sigaction sa;
+    arping_state_t st;
+    struct sigaction sa;
 
-        init_arping_state(config, &st);
+    init_arping_state(config, &st);
 
-        if (setup_arping_socket(config, &st) < 0) {
-                return EXIT_FAILURE;
+    if (setup_arping_socket(config, &st) < 0) {
+        return EXIT_FAILURE;
+    }
+
+    if (setgid(getgid()) != 0) {
+        log_warn("Failed to drop group privileges");
+    }
+    if (setuid(getuid()) != 0) {
+        log_warn("Failed to drop user privileges");
+    }
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_sigint;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
+
+    if (!config->quiet) {
+        if (config->cisco_style) {
+            char tgt_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &st.target_in, tgt_str, sizeof(tgt_str));
+            printf("Sending %u, 28-byte ARP Requests to %s, "
+                   "timeout is %u seconds:\n",
+                   config->count, tgt_str,
+                   (unsigned int)(config->timeout_ns / NS_PER_S));
+        } else {
+            char tgt_str[INET_ADDRSTRLEN], src_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &st.target_in, tgt_str, sizeof(tgt_str));
+            inet_ntop(AF_INET, &st.source_in, src_str, sizeof(src_str));
+            printf("ARPING %s from %s %s\n", tgt_str, src_str, config->iface);
+        }
+    }
+
+    while (keep_running && (config->count == 0 || st.sent < config->count)) {
+        u_int64_t send_time;
+        u_int64_t expire;
+        bool got_reply;
+
+        send_time = get_time_ns();
+
+        if (!send_arping_probe(config, &st)) {
+            break;
         }
 
-        if (setgid(getgid()) != 0) {
-                log_warn("Failed to drop group privileges");
-        }
-        if (setuid(getuid()) != 0) {
-                log_warn("Failed to drop user privileges");
-        }
+        expire = send_time + config->timeout_ns;
+        got_reply = recv_arping_reply(config, &st, expire, send_time);
 
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = handle_sigint;
-        sigaction(SIGINT, &sa, NULL);
-        sigaction(SIGTERM, &sa, NULL);
-        sigaction(SIGQUIT, &sa, NULL);
+        if (!keep_running)
+            break;
 
-        if (!config->quiet) {
-                if (config->cisco_style) {
-                        char tgt_str[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET, &st.target_in, tgt_str,
-                                  sizeof(tgt_str));
-                        printf("Sending %u, 28-byte ARP Requests to %s, "
-                               "timeout is %u seconds:\n",
-                               config->count, tgt_str,
-                               (unsigned int)(config->timeout_ns / NS_PER_S));
-                } else {
-                        char tgt_str[INET_ADDRSTRLEN], src_str[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET, &st.target_in, tgt_str,
-                                  sizeof(tgt_str));
-                        inet_ntop(AF_INET, &st.source_in, src_str,
-                                  sizeof(src_str));
-                        printf("ARPING %s from %s %s\n", tgt_str, src_str,
-                               config->iface);
-                }
+        if (!got_reply && !config->quiet) {
+            if (config->cisco_style) {
+                printf(".");
+                fflush(stdout);
+            } else {
+                printf("Timeout waiting for reply from %s\n",
+                       inet_ntoa(st.target_in));
+            }
         }
 
-        while (keep_running &&
-               (config->count == 0 || st.sent < config->count)) {
-                u_int64_t send_time;
-                u_int64_t expire;
-                bool got_reply;
-
-                send_time = get_time_ns();
-
-                if (!send_arping_probe(config, &st)) {
-                        break;
-                }
-
-                expire = send_time + config->timeout_ns;
-                got_reply = recv_arping_reply(config, &st, expire, send_time);
-
-                if (!keep_running)
-                        break;
-
-                if (!got_reply && !config->quiet) {
-                        if (config->cisco_style) {
-                                printf(".");
-                                fflush(stdout);
-                        } else {
-                                printf("Timeout waiting for reply from %s\n",
-                                       inet_ntoa(st.target_in));
-                        }
-                }
-
-                if (keep_running &&
-                    (config->count == 0 || st.sent < config->count)) {
-                        u_int64_t current = get_time_ns();
-                        u_int64_t next_send = send_time + config->interval_ns;
-                        if (current < next_send) {
-                                usleep((next_send - current) / 1000);
-                        }
-                }
+        if (keep_running && (config->count == 0 || st.sent < config->count)) {
+            u_int64_t current = get_time_ns();
+            u_int64_t next_send = send_time + config->interval_ns;
+            if (current < next_send) {
+                usleep((next_send - current) / 1000);
+            }
         }
+    }
 
-        print_arping_stats(config, &st);
-        close_raw_socket(st.sock);
+    print_arping_stats(config, &st);
+    close_raw_socket(st.sock);
 
-        if (config->dad) {
-                return (st.received > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
-        }
-        return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (config->dad) {
+        return (st.received > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+    }
+    return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

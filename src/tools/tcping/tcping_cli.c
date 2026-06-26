@@ -60,105 +60,103 @@ static const cli_option_t tcping_options[] = {
 static void
 print_usage(const char *prog_name)
 {
-        cli_app_t app = {.prog_name = prog_name,
-                         .usage_args = "[options] <destination> <port>",
-                         .options = tcping_options};
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options] <destination> <port>",
+                     .options = tcping_options};
 
-        cli_print_help(&app);
+    cli_print_help(&app);
 }
 
 int
 tcping_cli_main(int c, char **av)
 {
-        tcping_config_t config;
-        int ch;
-        const char *target_ip_str;
-        const char *prog_name;
+    tcping_config_t config;
+    int ch;
+    const char *target_ip_str;
+    const char *prog_name;
 
-        int ret = EXIT_FAILURE;
+    int ret = EXIT_FAILURE;
 
-        prog_name = *av;
+    prog_name = *av;
 
-        memset(&config, 0, sizeof(config));
+    memset(&config, 0, sizeof(config));
 
-        config.count = 0;
-        config.timeout_ns = NS_PER_S;
-        config.interval_ns = NS_PER_S;
-        config.family = AF_UNSPEC;
+    config.count = 0;
+    config.timeout_ns = NS_PER_S;
+    config.interval_ns = NS_PER_S;
+    config.family = AF_UNSPEC;
 
-        while ((ch = getopt(c, av, "46c:W:i:I:qh")) != -1) {
-                switch (ch) {
-                case '4':
+    while ((ch = getopt(c, av, "46c:W:i:I:qh")) != -1) {
+        switch (ch) {
+        case '4':
 
-                        config.family = AF_INET;
-                        break;
-                case '6':
+            config.family = AF_INET;
+            break;
+        case '6':
 
-                        config.family = AF_INET6;
-                        break;
-                case 'c':
-                        config.count = (u_int)atoi(optarg);
-                        break;
-                case 'W':
-                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
-                        break;
-                case 'i':
-                        config.interval_ns =
-                            (u_int64_t)atoi(optarg) * NS_PER_MS;
-                        break;
-                case 'I':
-                        config.bind_iface = optarg;
-                        break;
-                case 'q':
-                        config.quiet = true;
-                        break;
-                case 'h':
-                        print_usage(prog_name);
-                        ret = EXIT_SUCCESS;
-                        goto out;
-                default:
-                        goto usage_err;
-                }
+            config.family = AF_INET6;
+            break;
+        case 'c':
+            config.count = (u_int)atoi(optarg);
+            break;
+        case 'W':
+            config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
+            break;
+        case 'i':
+            config.interval_ns = (u_int64_t)atoi(optarg) * NS_PER_MS;
+            break;
+        case 'I':
+            config.bind_iface = optarg;
+            break;
+        case 'q':
+            config.quiet = true;
+            break;
+        case 'h':
+            print_usage(prog_name);
+            ret = EXIT_SUCCESS;
+            goto out;
+        default:
+            goto usage_err;
         }
+    }
 
-        c -= optind;
-        av += optind;
+    c -= optind;
+    av += optind;
 
-        if (c < 1) {
-                log_err("Target IP/hostname is required");
-                goto usage_err;
-        }
+    if (c < 1) {
+        log_err("Target IP/hostname is required");
+        goto usage_err;
+    }
 
-        if (c < 2) {
-                log_err("Target port is required");
-                goto usage_err;
-        }
+    if (c < 2) {
+        log_err("Target port is required");
+        goto usage_err;
+    }
 
-        target_ip_str = *av;
-        config.port = (u_short)atoi(*(av + 1));
+    target_ip_str = *av;
+    config.port = (u_short)atoi(*(av + 1));
 
-        if (config.port == 0) {
-                die("Invalid port: %s", *(av + 1));
-        }
+    if (config.port == 0) {
+        die("Invalid port: %s", *(av + 1));
+    }
 
-        if (!resolve_host(target_ip_str, config.family, &config.target_addr,
-                          &config.target_addr_len)) {
-                die("Invalid target IP address or hostname: %s", target_ip_str);
-        }
+    if (!resolve_host(target_ip_str, config.family, &config.target_addr,
+                      &config.target_addr_len)) {
+        die("Invalid target IP address or hostname: %s", target_ip_str);
+    }
 
-        config.family = config.target_addr.ss_family;
+    config.family = config.target_addr.ss_family;
 
-        if (getuid() != 0) {
-                log_warn(
-                    "tcping requires root privileges to open raw sockets.");
-        }
+    if (getuid() != 0) {
+        log_warn("tcping requires root privileges to open raw sockets.");
+    }
 
-        ret = tcping_run(&config);
-        goto out;
+    ret = tcping_run(&config);
+    goto out;
 
 usage_err:
-        print_usage(prog_name);
+    print_usage(prog_name);
 
 out:
-        return ret;
+    return ret;
 }

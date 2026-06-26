@@ -42,19 +42,19 @@
 #include <sys/types.h>
 
 typedef struct {
-        u_short start_port;
-        u_short end_port;
-        u_int64_t timeout_ns;
-        struct sockaddr_storage target_addr;
-        socklen_t target_addr_len;
-        int family;
-        const char *bind_iface;
-        u_int rate_limit;
-        bool udp;
-        bool randomize;
-        bool json_output;
-        bool banner_grab;
-        bool os_fingerprint;
+    u_short start_port;
+    u_short end_port;
+    u_int64_t timeout_ns;
+    struct sockaddr_storage target_addr;
+    socklen_t target_addr_len;
+    int family;
+    const char *bind_iface;
+    u_int rate_limit;
+    bool udp;
+    bool randomize;
+    bool json_output;
+    bool banner_grab;
+    bool os_fingerprint;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);

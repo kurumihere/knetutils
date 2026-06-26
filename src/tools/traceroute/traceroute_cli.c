@@ -62,106 +62,106 @@ static const cli_option_t traceroute_options[] = {
 static void
 print_usage(const char *prog_name)
 {
-        cli_app_t app = {.prog_name = prog_name,
-                         .usage_args = "[options] <destination>",
-                         .options = traceroute_options};
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options] <destination>",
+                     .options = traceroute_options};
 
-        cli_print_help(&app);
+    cli_print_help(&app);
 }
 
 int
 traceroute_cli_main(int c, char **av)
 {
-        traceroute_config_t config;
-        int ch;
-        const char *target_ip_str;
-        const char *prog_name;
+    traceroute_config_t config;
+    int ch;
+    const char *target_ip_str;
+    const char *prog_name;
 
-        int ret = EXIT_FAILURE;
+    int ret = EXIT_FAILURE;
 
-        prog_name = *av;
+    prog_name = *av;
 
-        memset(&config, 0, sizeof(config));
+    memset(&config, 0, sizeof(config));
 
+    config.first_ttl = 1;
+    config.max_ttl = 30;
+    config.queries = 3;
+    config.timeout_ns = 3 * NS_PER_S;
+    config.family = AF_UNSPEC;
+    config.resolve_hostnames = true;
+
+    while ((ch = getopt(c, av, "46f:m:q:w:I:nUh")) != -1) {
+        switch (ch) {
+        case '4':
+
+            config.family = AF_INET;
+            break;
+        case '6':
+            config.family = AF_INET6;
+            break;
+        case 'f':
+            config.first_ttl = (u_char)atoi(optarg);
+            break;
+        case 'm':
+            config.max_ttl = (u_char)atoi(optarg);
+            break;
+        case 'q':
+            config.queries = (u_char)atoi(optarg);
+            break;
+        case 'w':
+            config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
+            break;
+        case 'I':
+            config.bind_iface = optarg;
+            break;
+        case 'n':
+            config.resolve_hostnames = false;
+            break;
+        case 'U':
+            config.use_udp = true;
+            break;
+        case 'h':
+            print_usage(prog_name);
+            ret = EXIT_SUCCESS;
+            goto out;
+        default:
+            goto usage_err;
+        }
+    }
+
+    c -= optind;
+    av += optind;
+
+    if (c < 1) {
+        log_err("Target IP/hostname is required");
+        goto usage_err;
+    }
+
+    target_ip_str = *av;
+
+    if (!resolve_host(target_ip_str, config.family, &config.target_addr,
+                      &config.target_addr_len)) {
+        die("Invalid target IP address or hostname: %s", target_ip_str);
+    }
+
+    config.family = config.target_addr.ss_family;
+
+    if (config.first_ttl == 0) {
         config.first_ttl = 1;
-        config.max_ttl = 30;
-        config.queries = 3;
-        config.timeout_ns = 3 * NS_PER_S;
-        config.family = AF_UNSPEC;
-        config.resolve_hostnames = true;
+    }
 
-        while ((ch = getopt(c, av, "46f:m:q:w:I:nUh")) != -1) {
-                switch (ch) {
-                case '4':
+    if (getuid() != 0) {
 
-                        config.family = AF_INET;
-                        break;
-                case '6':
-                        config.family = AF_INET6;
-                        break;
-                case 'f':
-                        config.first_ttl = (u_char)atoi(optarg);
-                        break;
-                case 'm':
-                        config.max_ttl = (u_char)atoi(optarg);
-                        break;
-                case 'q':
-                        config.queries = (u_char)atoi(optarg);
-                        break;
-                case 'w':
-                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
-                        break;
-                case 'I':
-                        config.bind_iface = optarg;
-                        break;
-                case 'n':
-                        config.resolve_hostnames = false;
-                        break;
-                case 'U':
-                        config.use_udp = true;
-                        break;
-                case 'h':
-                        print_usage(prog_name);
-                        ret = EXIT_SUCCESS;
-                        goto out;
-                default:
-                        goto usage_err;
-                }
-        }
+        log_warn("traceroute requires root privileges to open raw "
+                 "sockets.");
+    }
 
-        c -= optind;
-        av += optind;
-
-        if (c < 1) {
-                log_err("Target IP/hostname is required");
-                goto usage_err;
-        }
-
-        target_ip_str = *av;
-
-        if (!resolve_host(target_ip_str, config.family, &config.target_addr,
-                          &config.target_addr_len)) {
-                die("Invalid target IP address or hostname: %s", target_ip_str);
-        }
-
-        config.family = config.target_addr.ss_family;
-
-        if (config.first_ttl == 0) {
-                config.first_ttl = 1;
-        }
-
-        if (getuid() != 0) {
-
-                log_warn("traceroute requires root privileges to open raw "
-                         "sockets.");
-        }
-
-        ret = traceroute_run(&config);
-        goto out;
+    ret = traceroute_run(&config);
+    goto out;
 
 usage_err:
-        print_usage(prog_name);
+    print_usage(prog_name);
 
 out:
-        return ret;
+    return ret;
 }

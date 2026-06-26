@@ -61,105 +61,105 @@ static const cli_option_t pscan_options[] = {
 static void
 print_usage(const char *prog_name)
 {
-        cli_app_t app = {.prog_name = prog_name,
-                         .usage_args = "[options] <destination>",
-                         .options = pscan_options};
-        cli_print_help(&app);
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options] <destination>",
+                     .options = pscan_options};
+    cli_print_help(&app);
 }
 
 int
 pscan_cli_main(int c, char **av)
 {
-        pscan_config_t config;
-        int ch;
-        int ret = EXIT_SUCCESS;
-        const char *target_ip_str;
+    pscan_config_t config;
+    int ch;
+    int ret = EXIT_SUCCESS;
+    const char *target_ip_str;
 
-        memset(&config, 0, sizeof(config));
+    memset(&config, 0, sizeof(config));
 
-        config.family = AF_UNSPEC;
-        config.timeout_ns = 2 * NS_PER_S;
-        config.start_port = 1;
-        config.end_port = 1024;
+    config.family = AF_UNSPEC;
+    config.timeout_ns = 2 * NS_PER_S;
+    config.start_port = 1;
+    config.end_port = 1024;
 
-        while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
-                switch (ch) {
-                case 'u':
+    while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
+        switch (ch) {
+        case 'u':
 
-                        config.udp = true;
-                        break;
-                case 's':
-                        config.banner_grab = true;
-                        break;
-                case 'O':
+            config.udp = true;
+            break;
+        case 's':
+            config.banner_grab = true;
+            break;
+        case 'O':
 
-                        config.os_fingerprint = true;
-                        break;
-                case 'j':
-                        config.json_output = true;
-                        break;
-                case 'R':
-                        config.randomize = true;
-                        break;
-                case '4':
-                        config.family = AF_INET;
-                        break;
-                case '6':
-                        config.family = AF_INET6;
-                        break;
-                case 'p': {
+            config.os_fingerprint = true;
+            break;
+        case 'j':
+            config.json_output = true;
+            break;
+        case 'R':
+            config.randomize = true;
+            break;
+        case '4':
+            config.family = AF_INET;
+            break;
+        case '6':
+            config.family = AF_INET6;
+            break;
+        case 'p': {
 
-                        char *dash = strchr(optarg, '-');
-                        if (dash) {
-                                *dash = '\0';
-                                config.start_port = (u_short)atoi(optarg);
-                                config.end_port = (u_short)atoi(dash + 1);
-                        } else {
-                                config.start_port = (u_short)atoi(optarg);
-                                config.end_port = config.start_port;
-                        }
-                        if (config.start_port == 0 || config.end_port == 0 ||
-                            config.start_port > config.end_port) {
-                                die("Invalid port range");
-                        }
-                        break;
-                }
-                case 'W':
-                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
-                        break;
-                case 'r':
-                        config.rate_limit = (u_int)atoi(optarg);
-                        break;
-                case 'I':
-                        config.bind_iface = optarg;
-                        break;
-                case 'h':
-                        print_usage(*av);
-                        goto out;
-                default:
-                        print_usage(*av);
-                        ret = EXIT_FAILURE;
-                        goto out;
-                }
+            char *dash = strchr(optarg, '-');
+            if (dash) {
+                *dash = '\0';
+                config.start_port = (u_short)atoi(optarg);
+                config.end_port = (u_short)atoi(dash + 1);
+            } else {
+                config.start_port = (u_short)atoi(optarg);
+                config.end_port = config.start_port;
+            }
+            if (config.start_port == 0 || config.end_port == 0 ||
+                config.start_port > config.end_port) {
+                die("Invalid port range");
+            }
+            break;
         }
-
-        c -= optind;
-        av += optind;
-
-        if (c < 1) {
-                log_err("Target IP/hostname is required");
-                ret = EXIT_FAILURE;
-                goto out;
+        case 'W':
+            config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
+            break;
+        case 'r':
+            config.rate_limit = (u_int)atoi(optarg);
+            break;
+        case 'I':
+            config.bind_iface = optarg;
+            break;
+        case 'h':
+            print_usage(*av);
+            goto out;
+        default:
+            print_usage(*av);
+            ret = EXIT_FAILURE;
+            goto out;
         }
+    }
 
-        target_ip_str = *av;
+    c -= optind;
+    av += optind;
 
-        if (!resolve_host(target_ip_str, config.family, &config.target_addr,
-                          &config.target_addr_len)) {
-                die("Invalid target IP address or hostname: %s", target_ip_str);
-        }
+    if (c < 1) {
+        log_err("Target IP/hostname is required");
+        ret = EXIT_FAILURE;
+        goto out;
+    }
 
-        ret = pscan_run(&config);
+    target_ip_str = *av;
+
+    if (!resolve_host(target_ip_str, config.family, &config.target_addr,
+                      &config.target_addr_len)) {
+        die("Invalid target IP address or hostname: %s", target_ip_str);
+    }
+
+    ret = pscan_run(&config);
 out:
-        return ret;
+    return ret;
 }

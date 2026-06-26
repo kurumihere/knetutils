@@ -44,26 +44,26 @@
 #define PING_MAX_PATTERN_LEN 16
 
 typedef struct {
-        u_int count;
-        u_int64_t timeout_ns;
-        u_int64_t interval_ns;
-        u_int payload_size;
-        u_char ttl;
-        bool quiet;
-        const char *time_unit;
-        struct sockaddr_storage target_addr;
-        socklen_t target_addr_len;
-        int family;
-        bool cisco_style;
-        bool flood;
-        bool audible;
-        bool adaptive;
-        const char *bind_iface;
-        u_char pattern[PING_MAX_PATTERN_LEN];
-        size_t pattern_len;
-        u_int64_t deadline_ns;
-        int tos;
-        bool has_tos;
+    u_int count;
+    u_int64_t timeout_ns;
+    u_int64_t interval_ns;
+    u_int payload_size;
+    u_char ttl;
+    bool quiet;
+    const char *time_unit;
+    struct sockaddr_storage target_addr;
+    socklen_t target_addr_len;
+    int family;
+    bool cisco_style;
+    bool flood;
+    bool audible;
+    bool adaptive;
+    const char *bind_iface;
+    u_char pattern[PING_MAX_PATTERN_LEN];
+    size_t pattern_len;
+    u_int64_t deadline_ns;
+    int tos;
+    bool has_tos;
 } ping_config_t;
 
 int ping_run(const ping_config_t *config);

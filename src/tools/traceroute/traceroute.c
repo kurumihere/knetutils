@@ -65,345 +65,325 @@ static volatile sig_atomic_t keep_running = 1;
 static void
 handle_sigint(int sig)
 {
-        (void)sig;
-        keep_running = 0;
+    (void)sig;
+    keep_running = 0;
 }
 
 typedef struct {
-        u_short pid;
-        u_short seq;
-        bool target_reached;
+    u_short pid;
+    u_short seq;
+    bool target_reached;
 
-        net_socket_t *sock;
-        int udp_sock;
+    net_socket_t *sock;
+    int udp_sock;
 
-        u_char *packet;
-        size_t header_size;
+    u_char *packet;
+    size_t header_size;
 
-        struct sockaddr_storage last_hop_addr;
+    struct sockaddr_storage last_hop_addr;
 } traceroute_state_t;
 
 static bool
 is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
 {
-        struct ip *ip_hdr;
-        int hlen;
-        struct icmp *icp;
-        bool ret_val = false;
+    struct ip *ip_hdr;
+    int hlen;
+    struct icmp *icp;
+    bool ret_val = false;
 
-        if (len < (ssize_t)sizeof(struct ip)) {
+    if (len < (ssize_t)sizeof(struct ip)) {
+        goto out;
+    }
+
+    ip_hdr = (struct ip *)buf;
+    hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
+
+    if (len < (ssize_t)(hlen + sizeof(struct icmp))) {
+        goto out;
+    }
+
+    icp = (struct icmp *)(buf + hlen);
+
+    if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
+        ret_val =
+            (icp->icmp_id == expected_id && icp->icmp_seq == expected_seq);
+        goto out;
+    }
+
+    if (icp->icmp_type == ICMP_TIMXCEED || icp->icmp_type == ICMP_UNREACH) {
+        struct ip *inner_ip;
+        int inner_hlen;
+
+        if (len < (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET + sizeof(struct ip))) {
+            goto out;
+        }
+
+        inner_ip = (struct ip *)icp->icmp_data;
+
+        inner_hlen = inner_ip->ip_hl << IPV4_HLEN_SHIFT;
+
+        if (use_udp) {
+            struct udphdr *inner_udp;
+
+            if (len < (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET + inner_hlen +
+                                sizeof(struct udphdr))) {
                 goto out;
+            }
+
+            inner_udp = (struct udphdr *)((u_char *)inner_ip + inner_hlen);
+            ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
+            goto out;
         }
 
-        ip_hdr = (struct ip *)buf;
-        hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
+        {
+            struct icmp *inner_icp;
 
-        if (len < (ssize_t)(hlen + sizeof(struct icmp))) {
+            if (len < (ssize_t)hlen + ICMP_ERROR_HDR_OFFSET + inner_hlen +
+                          ICMP_ERROR_HDR_OFFSET) {
                 goto out;
+            }
+
+            inner_icp = (struct icmp *)((u_char *)inner_ip + inner_hlen);
+            ret_val = (inner_icp->icmp_id == expected_id &&
+                       inner_icp->icmp_seq == expected_seq);
+            goto out;
         }
-
-        icp = (struct icmp *)(buf + hlen);
-
-        if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
-                ret_val = (icp->icmp_id == expected_id &&
-                           icp->icmp_seq == expected_seq);
-                goto out;
-        }
-
-        if (icp->icmp_type == ICMP_TIMXCEED || icp->icmp_type == ICMP_UNREACH) {
-                struct ip *inner_ip;
-                int inner_hlen;
-
-                if (len < (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
-                                    sizeof(struct ip))) {
-                        goto out;
-                }
-
-                inner_ip = (struct ip *)icp->icmp_data;
-
-                inner_hlen = inner_ip->ip_hl << IPV4_HLEN_SHIFT;
-
-                if (use_udp) {
-                        struct udphdr *inner_udp;
-
-                        if (len <
-                            (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
-                                      inner_hlen + sizeof(struct udphdr))) {
-                                goto out;
-                        }
-
-                        inner_udp =
-                            (struct udphdr *)((u_char *)inner_ip + inner_hlen);
-                        ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
-                        goto out;
-                }
-
-                {
-                        struct icmp *inner_icp;
-
-                        if (len < (ssize_t)hlen + ICMP_ERROR_HDR_OFFSET +
-                                      inner_hlen + ICMP_ERROR_HDR_OFFSET) {
-                                goto out;
-                        }
-
-                        inner_icp =
-                            (struct icmp *)((u_char *)inner_ip + inner_hlen);
-                        ret_val = (inner_icp->icmp_id == expected_id &&
-                                   inner_icp->icmp_seq == expected_seq);
-                        goto out;
-                }
-        }
+    }
 
 out:
-        return ret_val;
+    return ret_val;
 }
 
 static bool
 is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
 {
-        struct icmp6_hdr *icp;
-        bool ret_val = false;
+    struct icmp6_hdr *icp;
+    bool ret_val = false;
 
-        if (len < (ssize_t)sizeof(struct icmp6_hdr)) {
-                goto out;
+    if (len < (ssize_t)sizeof(struct icmp6_hdr)) {
+        goto out;
+    }
+
+    icp = (struct icmp6_hdr *)buf;
+
+    if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
+        ret_val =
+            (icp->icmp6_id == expected_id && icp->icmp6_seq == expected_seq);
+        goto out;
+    }
+
+    if (icp->icmp6_type == ICMP6_TIME_EXCEEDED ||
+        icp->icmp6_type == ICMP6_DST_UNREACH) {
+        struct ip6_hdr *inner_ip;
+
+        if (len < (ssize_t)(sizeof(struct icmp6_hdr) + sizeof(struct ip6_hdr) +
+                            ICMP_ERROR_HDR_OFFSET)) {
+            goto out;
         }
 
-        icp = (struct icmp6_hdr *)buf;
+        inner_ip = (struct ip6_hdr *)(icp + 1);
 
-        if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
-                ret_val = (icp->icmp6_id == expected_id &&
-                           icp->icmp6_seq == expected_seq);
-                goto out;
+        if (use_udp) {
+            struct udphdr *inner_udp;
+
+            inner_udp =
+                (struct udphdr *)((u_char *)inner_ip + sizeof(struct ip6_hdr));
+            ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
+            goto out;
         }
 
-        if (icp->icmp6_type == ICMP6_TIME_EXCEEDED ||
-            icp->icmp6_type == ICMP6_DST_UNREACH) {
-                struct ip6_hdr *inner_ip;
+        {
+            struct icmp6_hdr *inner_icp;
 
-                if (len <
-                    (ssize_t)(sizeof(struct icmp6_hdr) +
-                              sizeof(struct ip6_hdr) + ICMP_ERROR_HDR_OFFSET)) {
-                        goto out;
-                }
-
-                inner_ip = (struct ip6_hdr *)(icp + 1);
-
-                if (use_udp) {
-                        struct udphdr *inner_udp;
-
-                        inner_udp = (struct udphdr *)((u_char *)inner_ip +
-                                                      sizeof(struct ip6_hdr));
-                        ret_val = (ntohs(inner_udp->uh_dport) == expected_port);
-                        goto out;
-                }
-
-                {
-                        struct icmp6_hdr *inner_icp;
-
-                        inner_icp =
-                            (struct icmp6_hdr *)((u_char *)inner_ip +
-                                                 sizeof(struct ip6_hdr));
-                        ret_val = (inner_icp->icmp6_id == expected_id &&
-                                   inner_icp->icmp6_seq == expected_seq);
-                        goto out;
-                }
+            inner_icp = (struct icmp6_hdr *)((u_char *)inner_ip +
+                                             sizeof(struct ip6_hdr));
+            ret_val = (inner_icp->icmp6_id == expected_id &&
+                       inner_icp->icmp6_seq == expected_seq);
+            goto out;
         }
+    }
 
 out:
-        return ret_val;
+    return ret_val;
 }
 
 static void
 setup_traceroute_sockets(const traceroute_config_t *config,
                          traceroute_state_t *st)
 {
-        st->sock = open_icmp_socket(config->family);
+    st->sock = open_icmp_socket(config->family);
 
-        if (!st->sock) {
-                die("Failed to open ICMP socket. Are you root?");
+    if (!st->sock) {
+        die("Failed to open ICMP socket. Are you root?");
+    }
+
+    st->udp_sock = -1;
+
+    if (config->use_udp) {
+        st->udp_sock = socket(config->family, SOCK_DGRAM, IPPROTO_UDP);
+        if (st->udp_sock < 0) {
+            die("Failed to open UDP socket");
         }
+    }
 
-        st->udp_sock = -1;
+    if (config->bind_iface) {
+        struct sockaddr_storage bind_addr;
 
-        if (config->use_udp) {
-                st->udp_sock = socket(config->family, SOCK_DGRAM, IPPROTO_UDP);
-                if (st->udp_sock < 0) {
-                        die("Failed to open UDP socket");
-                }
+        memset(&bind_addr, 0, sizeof(bind_addr));
+
+        if (inet_pton(AF_INET, config->bind_iface,
+                      &((struct sockaddr_in *)&bind_addr)->sin_addr) == 1) {
+            bind_addr.ss_family = AF_INET;
+            if (bind(get_socket_fd(st->sock), (struct sockaddr *)&bind_addr,
+                     sizeof(struct sockaddr_in)) < 0) {
+                die("Failed to bind to IP %s", config->bind_iface);
+            }
+        } else if (inet_pton(AF_INET6, config->bind_iface,
+                             &((struct sockaddr_in6 *)&bind_addr)->sin6_addr) ==
+                   1) {
+            bind_addr.ss_family = AF_INET6;
+            if (bind(get_socket_fd(st->sock), (struct sockaddr *)&bind_addr,
+                     sizeof(struct sockaddr_in6)) < 0) {
+                die("Failed to bind to IP %s", config->bind_iface);
+            }
+        } else {
+            if (setsockopt(get_socket_fd(st->sock), SOL_SOCKET, SO_BINDTODEVICE,
+                           config->bind_iface,
+                           strlen(config->bind_iface)) < 0) {
+                die("Failed to bind to interface %s", config->bind_iface);
+            }
         }
-
-        if (config->bind_iface) {
-                struct sockaddr_storage bind_addr;
-
-                memset(&bind_addr, 0, sizeof(bind_addr));
-
-                if (inet_pton(AF_INET, config->bind_iface,
-                              &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
-                    1) {
-                        bind_addr.ss_family = AF_INET;
-                        if (bind(get_socket_fd(st->sock),
-                                 (struct sockaddr *)&bind_addr,
-                                 sizeof(struct sockaddr_in)) < 0) {
-                                die("Failed to bind to IP %s",
-                                    config->bind_iface);
-                        }
-                } else if (inet_pton(AF_INET6, config->bind_iface,
-                                     &((struct sockaddr_in6 *)&bind_addr)
-                                          ->sin6_addr) == 1) {
-                        bind_addr.ss_family = AF_INET6;
-                        if (bind(get_socket_fd(st->sock),
-                                 (struct sockaddr *)&bind_addr,
-                                 sizeof(struct sockaddr_in6)) < 0) {
-                                die("Failed to bind to IP %s",
-                                    config->bind_iface);
-                        }
-                } else {
-                        if (setsockopt(get_socket_fd(st->sock), SOL_SOCKET,
-                                       SO_BINDTODEVICE, config->bind_iface,
-                                       strlen(config->bind_iface)) < 0) {
-                                die("Failed to bind to interface %s",
-                                    config->bind_iface);
-                        }
-                }
-        }
+    }
 }
 
 static void
 init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
 {
-        memset(st, 0, sizeof(*st));
+    memset(st, 0, sizeof(*st));
 
-        st->pid = getpid() & PID_MASK;
-        st->seq = 1;
+    st->pid = getpid() & PID_MASK;
+    st->seq = 1;
 
-        st->header_size = (config->family == AF_INET6)
-                              ? sizeof(struct icmp6_hdr)
-                              : sizeof(struct icmp);
+    st->header_size = (config->family == AF_INET6) ? sizeof(struct icmp6_hdr)
+                                                   : sizeof(struct icmp);
 
-        st->packet = calloc(1, st->header_size);
+    st->packet = calloc(1, st->header_size);
 
-        if (!st->packet) {
-                die("Memory allocation failed");
-        }
+    if (!st->packet) {
+        die("Memory allocation failed");
+    }
 }
 
 static bool
 send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                       u_char ttl, u_short dest_port)
 {
-        int level;
-        int optname;
-        int ttl_val;
-        bool ret_val = false;
+    int level;
+    int optname;
+    int ttl_val;
+    bool ret_val = false;
 
-        level = (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
-        optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
-        ttl_val = ttl;
+    level = (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
+    optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
+    ttl_val = ttl;
 
-        if (config->use_udp) {
-                struct sockaddr_storage target;
-                char dummy[1];
+    if (config->use_udp) {
+        struct sockaddr_storage target;
+        char dummy[1];
 
-                dummy[0] = 0;
+        dummy[0] = 0;
 
-                setsockopt(st->udp_sock, level, optname, &ttl_val,
-                           sizeof(ttl_val));
+        setsockopt(st->udp_sock, level, optname, &ttl_val, sizeof(ttl_val));
 
-                target = config->target_addr;
-                if (config->family == AF_INET) {
-                        ((struct sockaddr_in *)&target)->sin_port =
-                            htons(dest_port);
-                } else {
-                        ((struct sockaddr_in6 *)&target)->sin6_port =
-                            htons(dest_port);
-                }
-
-                if (sendto(st->udp_sock, dummy, 0, 0,
-                           (struct sockaddr *)&target,
-                           config->target_addr_len) < 0) {
-                        goto out;
-                }
-
-                ret_val = true;
-                goto out;
-        }
-
-        setsockopt(get_socket_fd(st->sock), level, optname, &ttl_val,
-                   sizeof(ttl_val));
-
+        target = config->target_addr;
         if (config->family == AF_INET) {
-                struct icmp *icp = (struct icmp *)st->packet;
-
-                icp->icmp_type = ICMP_ECHO;
-                icp->icmp_code = 0;
-                icp->icmp_id = htons(st->pid);
-                icp->icmp_seq = htons(st->seq);
-                icp->icmp_cksum = 0;
-
-                icp->icmp_cksum =
-                    calculate_checksum(st->packet, st->header_size);
+            ((struct sockaddr_in *)&target)->sin_port = htons(dest_port);
         } else {
-                struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
-
-                icp->icmp6_type = ICMP6_ECHO_REQUEST;
-                icp->icmp6_code = 0;
-                icp->icmp6_id = htons(st->pid);
-                icp->icmp6_seq = htons(st->seq);
-                icp->icmp6_cksum = 0;
+            ((struct sockaddr_in6 *)&target)->sin6_port = htons(dest_port);
         }
 
-        if (send_icmp_packet(st->sock, st->packet, st->header_size,
-                             (struct sockaddr *)&config->target_addr,
-                             config->target_addr_len) < 0) {
-                goto out;
+        if (sendto(st->udp_sock, dummy, 0, 0, (struct sockaddr *)&target,
+                   config->target_addr_len) < 0) {
+            goto out;
         }
 
         ret_val = true;
+        goto out;
+    }
+
+    setsockopt(get_socket_fd(st->sock), level, optname, &ttl_val,
+               sizeof(ttl_val));
+
+    if (config->family == AF_INET) {
+        struct icmp *icp = (struct icmp *)st->packet;
+
+        icp->icmp_type = ICMP_ECHO;
+        icp->icmp_code = 0;
+        icp->icmp_id = htons(st->pid);
+        icp->icmp_seq = htons(st->seq);
+        icp->icmp_cksum = 0;
+
+        icp->icmp_cksum = calculate_checksum(st->packet, st->header_size);
+    } else {
+        struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
+
+        icp->icmp6_type = ICMP6_ECHO_REQUEST;
+        icp->icmp6_code = 0;
+        icp->icmp6_id = htons(st->pid);
+        icp->icmp6_seq = htons(st->seq);
+        icp->icmp6_cksum = 0;
+    }
+
+    if (send_icmp_packet(st->sock, st->packet, st->header_size,
+                         (struct sockaddr *)&config->target_addr,
+                         config->target_addr_len) < 0) {
+        goto out;
+    }
+
+    ret_val = true;
 
 out:
-        return ret_val;
+    return ret_val;
 }
 
 static bool
 check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 ssize_t n)
 {
-        bool ret_val = false;
+    bool ret_val = false;
 
-        if (config->family == AF_INET) {
-                struct ip *ip_hdr;
-                int hlen;
+    if (config->family == AF_INET) {
+        struct ip *ip_hdr;
+        int hlen;
 
-                ip_hdr = (struct ip *)recv_buf;
-                hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
+        ip_hdr = (struct ip *)recv_buf;
+        hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
 
-                if (n >= (ssize_t)(hlen + sizeof(struct icmp))) {
-                        struct icmp *icp = (struct icmp *)(recv_buf + hlen);
+        if (n >= (ssize_t)(hlen + sizeof(struct icmp))) {
+            struct icmp *icp = (struct icmp *)(recv_buf + hlen);
 
-                        if (icp->icmp_type == ICMP_ECHOREPLY ||
-                            (config->use_udp &&
-                             icp->icmp_type == ICMP_UNREACH)) {
-                                ret_val = true;
-                                goto out;
-                        }
-                }
-        } else {
-                if (n >= (ssize_t)sizeof(struct icmp6_hdr)) {
-                        struct icmp6_hdr *icp = (struct icmp6_hdr *)recv_buf;
-
-                        if (icp->icmp6_type == ICMP6_ECHO_REPLY ||
-                            (config->use_udp &&
-                             icp->icmp6_type == ICMP6_DST_UNREACH)) {
-                                ret_val = true;
-                                goto out;
-                        }
-                }
+            if (icp->icmp_type == ICMP_ECHOREPLY ||
+                (config->use_udp && icp->icmp_type == ICMP_UNREACH)) {
+                ret_val = true;
+                goto out;
+            }
         }
+    } else {
+        if (n >= (ssize_t)sizeof(struct icmp6_hdr)) {
+            struct icmp6_hdr *icp = (struct icmp6_hdr *)recv_buf;
+
+            if (icp->icmp6_type == ICMP6_ECHO_REPLY ||
+                (config->use_udp && icp->icmp6_type == ICMP6_DST_UNREACH)) {
+                ret_val = true;
+                goto out;
+            }
+        }
+    }
 
 out:
-        return ret_val;
+    return ret_val;
 }
 
 static void
@@ -411,25 +391,23 @@ print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
                struct sockaddr_storage *src_addr, socklen_t src_addr_len)
 {
 
-        if (memcmp(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr)) !=
-            0) {
-                char host_str[NI_MAXHOST];
-                char ip_str[INET6_ADDRSTRLEN];
+    if (memcmp(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr)) != 0) {
+        char host_str[NI_MAXHOST];
+        char ip_str[INET6_ADDRSTRLEN];
 
-                getnameinfo((struct sockaddr *)src_addr, src_addr_len, ip_str,
-                            sizeof(ip_str), NULL, 0, NI_NUMERICHOST);
+        getnameinfo((struct sockaddr *)src_addr, src_addr_len, ip_str,
+                    sizeof(ip_str), NULL, 0, NI_NUMERICHOST);
 
-                if (config->resolve_hostnames &&
-                    getnameinfo((struct sockaddr *)src_addr, src_addr_len,
-                                host_str, sizeof(host_str), NULL, 0,
-                                NI_NAMEREQD) == 0) {
-                        printf("%s (%s)  ", host_str, ip_str);
-                } else {
-                        printf("%s  ", ip_str);
-                }
-
-                memcpy(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr));
+        if (config->resolve_hostnames &&
+            getnameinfo((struct sockaddr *)src_addr, src_addr_len, host_str,
+                        sizeof(host_str), NULL, 0, NI_NAMEREQD) == 0) {
+            printf("%s (%s)  ", host_str, ip_str);
+        } else {
+            printf("%s  ", ip_str);
         }
+
+        memcpy(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr));
+    }
 }
 
 static bool
@@ -437,160 +415,157 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                       u_int64_t wait_until, u_int64_t send_time,
                       u_short dest_port)
 {
-        struct pollfd pfd;
-        bool ret_val = false;
+    struct pollfd pfd;
+    bool ret_val = false;
 
-        pfd.fd = get_socket_fd(st->sock);
-        pfd.events = POLLIN;
+    pfd.fd = get_socket_fd(st->sock);
+    pfd.events = POLLIN;
 
-        while (get_time_ns() < wait_until && keep_running) {
-                int64_t timeout_ns;
-                int timeout_ms;
-                int ret;
-                __attribute__((aligned(8))) u_char recv_buf[RECV_BUF_SIZE];
-                struct sockaddr_storage src_addr;
-                socklen_t src_addr_len = sizeof(src_addr);
-                ssize_t n;
-                bool is_mine = false;
-                u_int64_t recv_time;
-                u_int64_t rtt;
-                char time_buf[64];
+    while (get_time_ns() < wait_until && keep_running) {
+        int64_t timeout_ns;
+        int timeout_ms;
+        int ret;
+        __attribute__((aligned(8))) u_char recv_buf[RECV_BUF_SIZE];
+        struct sockaddr_storage src_addr;
+        socklen_t src_addr_len = sizeof(src_addr);
+        ssize_t n;
+        bool is_mine = false;
+        u_int64_t recv_time;
+        u_int64_t rtt;
+        char time_buf[64];
 
-                timeout_ns = wait_until - get_time_ns();
-                if (timeout_ns <= 0) {
-                        break;
-                }
-
-                timeout_ms = timeout_ns / NS_PER_MS;
-                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-
-                if (ret <= 0 || !(pfd.revents & POLLIN)) {
-                        continue;
-                }
-
-                n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
-                                     &src_addr, &src_addr_len);
-
-                if (n <= 0) {
-                        continue;
-                }
-
-                if (config->family == AF_INET) {
-                        is_mine = is_our_probe_v4(recv_buf, n, htons(st->pid),
-                                                  htons(st->seq),
-                                                  config->use_udp, dest_port);
-                } else {
-                        is_mine = is_our_probe_v6(recv_buf, n, htons(st->pid),
-                                                  htons(st->seq),
-                                                  config->use_udp, dest_port);
-                }
-
-                if (!is_mine) {
-                        continue;
-                }
-
-                recv_time = get_time_ns();
-                rtt = time_diff_ns(send_time, recv_time);
-
-                print_hop_info(config, st, &src_addr, src_addr_len);
-
-                format_time(rtt, NULL, time_buf, sizeof(time_buf));
-                printf("%s  ", time_buf);
-                fflush(stdout);
-
-                if (check_is_target(config, recv_buf, n)) {
-                        st->target_reached = true;
-                }
-
-                ret_val = true;
-                goto out;
+        timeout_ns = wait_until - get_time_ns();
+        if (timeout_ns <= 0) {
+            break;
         }
 
+        timeout_ms = timeout_ns / NS_PER_MS;
+        ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+
+        if (ret <= 0 || !(pfd.revents & POLLIN)) {
+            continue;
+        }
+
+        n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf), &src_addr,
+                             &src_addr_len);
+
+        if (n <= 0) {
+            continue;
+        }
+
+        if (config->family == AF_INET) {
+            is_mine =
+                is_our_probe_v4(recv_buf, n, htons(st->pid), htons(st->seq),
+                                config->use_udp, dest_port);
+        } else {
+            is_mine =
+                is_our_probe_v6(recv_buf, n, htons(st->pid), htons(st->seq),
+                                config->use_udp, dest_port);
+        }
+
+        if (!is_mine) {
+            continue;
+        }
+
+        recv_time = get_time_ns();
+        rtt = time_diff_ns(send_time, recv_time);
+
+        print_hop_info(config, st, &src_addr, src_addr_len);
+
+        format_time(rtt, NULL, time_buf, sizeof(time_buf));
+        printf("%s  ", time_buf);
+        fflush(stdout);
+
+        if (check_is_target(config, recv_buf, n)) {
+            st->target_reached = true;
+        }
+
+        ret_val = true;
+        goto out;
+    }
+
 out:
-        return ret_val;
+    return ret_val;
 }
 
 int
 traceroute_run(const traceroute_config_t *config)
 {
-        struct sigaction sa;
-        traceroute_state_t st;
-        char target_str[INET6_ADDRSTRLEN];
-        u_char ttl;
-        u_char probe;
+    struct sigaction sa;
+    traceroute_state_t st;
+    char target_str[INET6_ADDRSTRLEN];
+    u_char ttl;
+    u_char probe;
 
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = handle_sigint;
-        sigaction(SIGINT, &sa, NULL);
-        sigaction(SIGTERM, &sa, NULL);
-        sigaction(SIGQUIT, &sa, NULL);
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_sigint;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
 
-        init_traceroute_state(config, &st);
-        setup_traceroute_sockets(config, &st);
+    init_traceroute_state(config, &st);
+    setup_traceroute_sockets(config, &st);
 
-        if (setgid(getgid()) != 0) {
-                log_warn("Failed to drop group privileges");
-        }
-        if (setuid(getuid()) != 0) {
-                log_warn("Failed to drop user privileges");
-        }
+    if (setgid(getgid()) != 0) {
+        log_warn("Failed to drop group privileges");
+    }
+    if (setuid(getuid()) != 0) {
+        log_warn("Failed to drop user privileges");
+    }
 
-        getnameinfo((struct sockaddr *)&config->target_addr,
-                    config->target_addr_len, target_str, sizeof(target_str),
-                    NULL, 0, NI_NUMERICHOST);
+    getnameinfo((struct sockaddr *)&config->target_addr,
+                config->target_addr_len, target_str, sizeof(target_str), NULL,
+                0, NI_NUMERICHOST);
 
-        printf("traceroute to %s, %u hops max\n", target_str, config->max_ttl);
+    printf("traceroute to %s, %u hops max\n", target_str, config->max_ttl);
 
-        for (ttl = config->first_ttl;
-             ttl <= config->max_ttl && keep_running && !st.target_reached;
-             ttl++) {
-                u_short dest_port;
-                u_int64_t send_time;
-                u_int64_t wait_until;
-                bool got_reply;
+    for (ttl = config->first_ttl;
+         ttl <= config->max_ttl && keep_running && !st.target_reached; ttl++) {
+        u_short dest_port;
+        u_int64_t send_time;
+        u_int64_t wait_until;
+        bool got_reply;
 
-                printf("%2u  ", ttl);
+        printf("%2u  ", ttl);
+        fflush(stdout);
+
+        memset(&st.last_hop_addr, 0, sizeof(st.last_hop_addr));
+
+        for (probe = 0; probe < config->queries && keep_running; probe++) {
+            dest_port =
+                TRACEROUTE_PORT_BASE + (ttl - 1) * config->queries + probe;
+            send_time = get_time_ns();
+
+            if (!send_traceroute_probe(config, &st, ttl, dest_port)) {
+                printf("* ");
                 fflush(stdout);
+                st.seq++;
+                continue;
+            }
 
-                memset(&st.last_hop_addr, 0, sizeof(st.last_hop_addr));
+            wait_until = send_time + config->timeout_ns;
 
-                for (probe = 0; probe < config->queries && keep_running;
-                     probe++) {
-                        dest_port = TRACEROUTE_PORT_BASE +
-                                    (ttl - 1) * config->queries + probe;
-                        send_time = get_time_ns();
+            got_reply = recv_traceroute_reply(config, &st, wait_until,
+                                              send_time, dest_port);
 
-                        if (!send_traceroute_probe(config, &st, ttl,
-                                                   dest_port)) {
-                                printf("* ");
-                                fflush(stdout);
-                                st.seq++;
-                                continue;
-                        }
+            if (!got_reply) {
+                printf("* ");
+                fflush(stdout);
+            }
 
-                        wait_until = send_time + config->timeout_ns;
-
-                        got_reply = recv_traceroute_reply(
-                            config, &st, wait_until, send_time, dest_port);
-
-                        if (!got_reply) {
-                                printf("* ");
-                                fflush(stdout);
-                        }
-
-                        st.seq++;
-                }
-
-                printf("\n");
+            st.seq++;
         }
 
-        free(st.packet);
+        printf("\n");
+    }
 
-        if (st.udp_sock >= 0) {
-                close(st.udp_sock);
-        }
+    free(st.packet);
 
-        close_raw_socket(st.sock);
+    if (st.udp_sock >= 0) {
+        close(st.udp_sock);
+    }
 
-        return EXIT_SUCCESS;
+    close_raw_socket(st.sock);
+
+    return EXIT_SUCCESS;
 }

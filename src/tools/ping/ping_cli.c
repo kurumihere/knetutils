@@ -68,133 +68,131 @@ static const cli_option_t ping_options[] = {
 static void
 print_usage(const char *prog_name)
 {
-        cli_app_t app = {.prog_name = prog_name,
-                         .usage_args = "[options] <destination>",
-                         .options = ping_options};
-        cli_print_help(&app);
+    cli_app_t app = {.prog_name = prog_name,
+                     .usage_args = "[options] <destination>",
+                     .options = ping_options};
+    cli_print_help(&app);
 }
 
 int
 ping_cli_main(int c, char **av)
 {
-        ping_config_t config;
-        int ch;
-        const char *target_ip_str;
+    ping_config_t config;
+    int ch;
+    const char *target_ip_str;
 
-        memset(&config, 0, sizeof(config));
+    memset(&config, 0, sizeof(config));
 
-        config.count = 0;
-        config.timeout_ns = NS_PER_S;
-        config.interval_ns = NS_PER_S;
-        config.payload_size = 56;
-        config.ttl = 0;
+    config.count = 0;
+    config.timeout_ns = NS_PER_S;
+    config.interval_ns = NS_PER_S;
+    config.payload_size = 56;
+    config.ttl = 0;
 
-        config.family = AF_UNSPEC;
+    config.family = AF_UNSPEC;
 
-        while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
-                switch (ch) {
-                case '4':
+    while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
+        switch (ch) {
+        case '4':
 
-                        config.family = AF_INET;
-                        break;
-                case '6':
-                        config.family = AF_INET6;
-                        break;
-                case 'C':
-                        config.cisco_style = true;
-                        break;
-                case 'a':
-                        config.audible = true;
-                        break;
-                case 'A':
-                        config.adaptive = true;
-                        break;
-                case 'f':
-                        config.flood = true;
-                        config.interval_ns = 10 * NS_PER_MS;
-                        break;
-                case 'I':
-                        config.bind_iface = optarg;
-                        break;
-                case 'c':
-                        config.count = (u_int)atoi(optarg);
-                        break;
-                case 'w':
-                        config.deadline_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
-                        break;
-                case 'W':
-                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
-                        break;
-                case 'i':
-                        config.interval_ns =
-                            (u_int64_t)atoi(optarg) * NS_PER_MS;
-                        break;
-                case 'u':
-                        config.time_unit = optarg;
-                        break;
-                case 's':
-                        config.payload_size = (u_int)atoi(optarg);
-                        break;
-                case 'p': {
+            config.family = AF_INET;
+            break;
+        case '6':
+            config.family = AF_INET6;
+            break;
+        case 'C':
+            config.cisco_style = true;
+            break;
+        case 'a':
+            config.audible = true;
+            break;
+        case 'A':
+            config.adaptive = true;
+            break;
+        case 'f':
+            config.flood = true;
+            config.interval_ns = 10 * NS_PER_MS;
+            break;
+        case 'I':
+            config.bind_iface = optarg;
+            break;
+        case 'c':
+            config.count = (u_int)atoi(optarg);
+            break;
+        case 'w':
+            config.deadline_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
+            break;
+        case 'W':
+            config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
+            break;
+        case 'i':
+            config.interval_ns = (u_int64_t)atoi(optarg) * NS_PER_MS;
+            break;
+        case 'u':
+            config.time_unit = optarg;
+            break;
+        case 's':
+            config.payload_size = (u_int)atoi(optarg);
+            break;
+        case 'p': {
 
-                        size_t len = strlen(optarg);
-                        size_t i;
-                        if (len > 32)
-                                len = 32;
-                        config.pattern_len = len / 2;
-                        for (i = 0; i < config.pattern_len; i++) {
-                                unsigned int byte;
-                                sscanf(optarg + i * 2, "%2x", &byte);
-                                config.pattern[i] = (u_char)byte;
-                        }
-                        break;
-                }
-                case 'Q':
-
-                        config.tos = (int)strtol(optarg, NULL, 0);
-                        config.has_tos = true;
-                        break;
-                case 't':
-                        config.ttl = (u_char)atoi(optarg);
-                        break;
-                case 'q':
-                        config.quiet = true;
-                        break;
-                case 'h':
-                        print_usage(*av);
-                        return EXIT_SUCCESS;
-                default:
-                        print_usage(*av);
-                        goto err;
-                }
+            size_t len = strlen(optarg);
+            size_t i;
+            if (len > 32)
+                len = 32;
+            config.pattern_len = len / 2;
+            for (i = 0; i < config.pattern_len; i++) {
+                unsigned int byte;
+                sscanf(optarg + i * 2, "%2x", &byte);
+                config.pattern[i] = (u_char)byte;
+            }
+            break;
         }
+        case 'Q':
 
-        c -= optind;
-        av += optind;
-
-        if (c < 1) {
-                log_err("Target IP/hostname is required");
-                goto err;
+            config.tos = (int)strtol(optarg, NULL, 0);
+            config.has_tos = true;
+            break;
+        case 't':
+            config.ttl = (u_char)atoi(optarg);
+            break;
+        case 'q':
+            config.quiet = true;
+            break;
+        case 'h':
+            print_usage(*av);
+            return EXIT_SUCCESS;
+        default:
+            print_usage(*av);
+            goto err;
         }
+    }
 
-        target_ip_str = *av;
-        if (!resolve_host(target_ip_str, config.family, &config.target_addr,
-                          &config.target_addr_len)) {
-                die("Invalid target IP address or hostname: %s", target_ip_str);
-        }
-        config.family = config.target_addr.ss_family;
+    c -= optind;
+    av += optind;
 
-        if (config.cisco_style && config.count == 0) {
-                config.count = 5;
-        }
+    if (c < 1) {
+        log_err("Target IP/hostname is required");
+        goto err;
+    }
 
-        if (getuid() != 0) {
-                log_warn(
-                    "ping may require root privileges to open raw sockets.");
-        }
+    target_ip_str = *av;
+    if (!resolve_host(target_ip_str, config.family, &config.target_addr,
+                      &config.target_addr_len)) {
+        die("Invalid target IP address or hostname: %s", target_ip_str);
+    }
+    config.family = config.target_addr.ss_family;
 
-        return ping_run(&config);
+    if (config.cisco_style && config.count == 0) {
+        config.count = 5;
+    }
+
+    if (getuid() != 0) {
+        log_warn("ping may require root privileges to open raw sockets.");
+    }
+
+    return ping_run(&config);
 
 err:
-        return EXIT_FAILURE;
+    return EXIT_FAILURE;
 }
