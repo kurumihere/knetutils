@@ -103,9 +103,6 @@ sniff_cli_main(int c, char **av)
                 }
         }
 
-        c -= optind;
-        av += optind;
-
         if (!config.iface) {
                 log_err("Interface is required (-I)");
                 print_usage(prog_name);

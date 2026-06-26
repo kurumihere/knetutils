@@ -94,7 +94,7 @@ typedef struct {
 static int
 setup_arping_socket(const arping_config_t *config, arping_state_t *st)
 {
-        st->sock = net_open_raw_socket(config->iface, ETH_P_ARP);
+        st->sock = open_raw_socket(config->iface, ETH_P_ARP);
         if (!st->sock) {
                 log_err("Failed to open raw socket on interface %s",
                         config->iface);
@@ -102,7 +102,7 @@ setup_arping_socket(const arping_config_t *config, arping_state_t *st)
         }
 
         if (config->dad) {
-                if (!net_set_promiscuous(st->sock)) {
+                if (!set_promiscuous(st->sock)) {
                         log_warn("Failed to set promiscuous mode for DAD. "
                                  "Detection might be incomplete.");
                 }
@@ -157,8 +157,8 @@ send_arping_probe(const arping_config_t *config, arping_state_t *st)
 
         memcpy(arp->arp_tpa, &config->target_ip, IPV4_ALEN);
 
-        if (net_send_packet(st->sock, buffer, sizeof(buffer),
-                            st->current_target_mac) < 0) {
+        if (send_packet(st->sock, buffer, sizeof(buffer),
+                        st->current_target_mac) < 0) {
                 log_err("Failed to send ARP packet");
                 return false;
         }
@@ -206,7 +206,7 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                   u_int64_t expire, u_int64_t send_time)
 {
         struct pollfd pfd;
-        pfd.fd = net_get_fd(st->sock);
+        pfd.fd = get_socket_fd(st->sock);
         pfd.events = POLLIN;
 
         while (get_time_ns() < expire && keep_running) {
@@ -233,7 +233,7 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                 if (!(pfd.revents & POLLIN))
                         continue;
 
-                n = net_recv_packet(st->sock, recv_buf, sizeof(recv_buf));
+                n = recv_packet(st->sock, recv_buf, sizeof(recv_buf));
                 if (n < 0)
                         continue;
 
@@ -375,7 +375,7 @@ arping_run(const arping_config_t *config)
         }
 
         print_arping_stats(config, &st);
-        net_close_raw_socket(st.sock);
+        close_raw_socket(st.sock);
 
         if (config->dad) {
                 return (st.received > 0) ? EXIT_FAILURE : EXIT_SUCCESS;

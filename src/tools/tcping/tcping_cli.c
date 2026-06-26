@@ -141,8 +141,8 @@ tcping_cli_main(int c, char **av)
                 die("Invalid port: %s", *(av + 1));
         }
 
-        if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
-                              &config.target_addr_len)) {
+        if (!resolve_host(target_ip_str, config.family, &config.target_addr,
+                          &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
         }
 

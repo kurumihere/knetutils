@@ -111,7 +111,7 @@ typedef struct {
 static void
 setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
 {
-        st->sock = net_open_ip_raw_socket(config->family, IPPROTO_TCP);
+        st->sock = open_ip_raw_socket(config->family, IPPROTO_TCP);
 
         if (!st->sock) {
                 die("Failed to open raw TCP socket. Are you root?");
@@ -126,7 +126,7 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
                               &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
                     1) {
                         bind_addr.ss_family = AF_INET;
-                        if (bind(net_get_fd(st->sock),
+                        if (bind(get_socket_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in)) < 0) {
                                 die("Failed to bind to IP %s",
@@ -136,14 +136,14 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
                                      &((struct sockaddr_in6 *)&bind_addr)
                                           ->sin6_addr) == 1) {
                         bind_addr.ss_family = AF_INET6;
-                        if (bind(net_get_fd(st->sock),
+                        if (bind(get_socket_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in6)) < 0) {
                                 die("Failed to bind to IP %s",
                                     config->bind_iface);
                         }
                 } else {
-                        if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
+                        if (setsockopt(get_socket_fd(st->sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
                                 die("Failed to bind to interface %s",
@@ -163,9 +163,8 @@ init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
                     sizeof(st->target_str), NULL, 0, NI_NUMERICHOST);
 
         st->src_addr_len = sizeof(st->src_addr);
-        if (!net_get_source_ip_for(&config->target_addr,
-                                   config->target_addr_len, &st->src_addr,
-                                   &st->src_addr_len)) {
+        if (!get_source_ip_for(&config->target_addr, config->target_addr_len,
+                               &st->src_addr, &st->src_addr_len)) {
                 die("Failed to determine source IP for target");
         }
 
@@ -221,11 +220,11 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
         csum_len += sizeof(tcph);
 
-        tcph.th_sum = net_checksum(csum_buf, csum_len);
+        tcph.th_sum = calculate_checksum(csum_buf, csum_len);
 
-        if (net_send_ip_raw(st->sock, &tcph, sizeof(tcph),
-                            (struct sockaddr *)&config->target_addr,
-                            config->target_addr_len) < 0) {
+        if (send_ip_raw(st->sock, &tcph, sizeof(tcph),
+                        (struct sockaddr *)&config->target_addr,
+                        config->target_addr_len) < 0) {
                 log_err("Failed to send TCP SYN packet");
         }
         st->sent++;
@@ -260,7 +259,7 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
         struct pollfd pfd;
         bool ret_val = false;
 
-        pfd.fd = net_get_fd(st->sock);
+        pfd.fd = get_socket_fd(st->sock);
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
@@ -289,8 +288,8 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                         continue;
                 }
 
-                n = net_recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
-                                    &from_addr, &from_addr_len);
+                n = recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
+                                &from_addr, &from_addr_len);
 
                 if (n <= 0) {
                         continue;
@@ -412,7 +411,7 @@ tcping_run(const tcping_config_t *config)
                 }
         }
 
-        net_close_raw_socket(st.sock);
+        close_raw_socket(st.sock);
 
         print_tcping_stats(config, &st);
 

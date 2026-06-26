@@ -169,7 +169,7 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
                 }
                 icp->icmp_cksum = 0;
 
-                icp->icmp_cksum = net_checksum(st->packet, st->total_len);
+                icp->icmp_cksum = calculate_checksum(st->packet, st->total_len);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
                 u_int64_t *ts;
@@ -190,9 +190,9 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
                 fflush(stdout);
         }
 
-        if (net_send_icmp_packet(st->sock, st->packet, st->total_len,
-                                 (struct sockaddr *)&config->target_addr,
-                                 config->target_addr_len) < 0) {
+        if (send_icmp_packet(st->sock, st->packet, st->total_len,
+                             (struct sockaddr *)&config->target_addr,
+                             config->target_addr_len) < 0) {
                 log_err("Failed to send ICMP packet");
         }
         st->sent++;
@@ -203,7 +203,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 u_int64_t wait_until, u_int64_t send_time)
 {
         struct pollfd pfd;
-        pfd.fd = net_get_fd(st->sock);
+        pfd.fd = get_socket_fd(st->sock);
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
@@ -233,8 +233,8 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (ret <= 0 || !(pfd.revents & POLLIN))
                         continue;
 
-                n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
-                                         &src_addr, &src_addr_len);
+                n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
+                                     &src_addr, &src_addr_len);
                 if (n <= 0)
                         continue;
 
@@ -390,7 +390,7 @@ setup_socket_options(const ping_config_t *config, net_socket_t *sock)
                               &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
                     1) {
                         bind_addr.ss_family = AF_INET;
-                        if (bind(net_get_fd(sock),
+                        if (bind(get_socket_fd(sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in)) < 0) {
                                 die("Failed to bind to IP %s",
@@ -400,14 +400,14 @@ setup_socket_options(const ping_config_t *config, net_socket_t *sock)
                                      &((struct sockaddr_in6 *)&bind_addr)
                                           ->sin6_addr) == 1) {
                         bind_addr.ss_family = AF_INET6;
-                        if (bind(net_get_fd(sock),
+                        if (bind(get_socket_fd(sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in6)) < 0) {
                                 die("Failed to bind to IP %s",
                                     config->bind_iface);
                         }
                 } else {
-                        if (setsockopt(net_get_fd(sock), SOL_SOCKET,
+                        if (setsockopt(get_socket_fd(sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
                                 die("Failed to bind to interface %s",
@@ -422,7 +422,8 @@ setup_socket_options(const ping_config_t *config, net_socket_t *sock)
                     (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
                 int optname =
                     (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
-                setsockopt(net_get_fd(sock), level, optname, &ttl, sizeof(ttl));
+                setsockopt(get_socket_fd(sock), level, optname, &ttl,
+                           sizeof(ttl));
         }
 
         if (config->has_tos) {
@@ -431,7 +432,8 @@ setup_socket_options(const ping_config_t *config, net_socket_t *sock)
                     (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
                 int optname =
                     (config->family == AF_INET6) ? IPV6_TCLASS : IP_TOS;
-                setsockopt(net_get_fd(sock), level, optname, &tos, sizeof(tos));
+                setsockopt(get_socket_fd(sock), level, optname, &tos,
+                           sizeof(tos));
         }
 }
 
@@ -448,7 +450,7 @@ ping_run(const ping_config_t *config)
         sigaction(SIGTERM, &sa, NULL);
         sigaction(SIGQUIT, &sa, NULL);
 
-        sock = net_open_icmp_socket(config->family);
+        sock = open_icmp_socket(config->family);
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
         }
@@ -464,7 +466,7 @@ ping_run(const ping_config_t *config)
 
         init_ping_state(config, &st);
         st.sock = sock;
-        st.is_dgram = net_is_dgram(sock);
+        st.is_dgram = is_dgram(sock);
 
         if (!config->quiet) {
                 if (config->cisco_style) {
@@ -560,7 +562,7 @@ ping_run(const ping_config_t *config)
 
         print_statistics(config, &st);
 
-        net_close_raw_socket(sock);
+        close_raw_socket(sock);
         free(st.packet);
 
         return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;

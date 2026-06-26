@@ -124,9 +124,8 @@ init_pscan_state(const pscan_config_t *config, pscan_state_t *st)
                     sizeof(st->target_str), NULL, 0, NI_NUMERICHOST);
 
         st->src_addr_len = sizeof(st->src_addr);
-        if (!net_get_source_ip_for(&config->target_addr,
-                                   config->target_addr_len, &st->src_addr,
-                                   &st->src_addr_len)) {
+        if (!get_source_ip_for(&config->target_addr, config->target_addr_len,
+                               &st->src_addr, &st->src_addr_len)) {
                 die("Failed to determine source IP for target");
         }
 
@@ -168,7 +167,7 @@ grab_banner(const pscan_config_t *config, u_short port, char *banner_buf,
                 send(fd, http_req, strlen(http_req), 0);
                 n = recv(fd, banner_buf, banner_len - 1, 0);
         }
-        if (n > 0) {
+        if (n > 0 && n < 128) {
                 banner_buf[n] = '\0';
                 for (i = 0; i < n; i++) {
                         if (banner_buf[i] == '\r' || banner_buf[i] == '\n') {
@@ -251,7 +250,7 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
         memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
         csum_len += sizeof(tcph);
 
-        tcph.th_sum = net_checksum(csum_buf, csum_len);
+        tcph.th_sum = calculate_checksum(csum_buf, csum_len);
 
         memcpy(&dst, &config->target_addr, config->target_addr_len);
         if (dst.ss_family == AF_INET) {
@@ -260,9 +259,8 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
                 ((struct sockaddr_in6 *)&dst)->sin6_port = htons(dport);
         }
 
-        if (net_send_ip_raw(st->sock, &tcph, sizeof(tcph),
-                            (struct sockaddr *)&dst,
-                            config->target_addr_len) < 0) {
+        if (send_ip_raw(st->sock, &tcph, sizeof(tcph), (struct sockaddr *)&dst,
+                        config->target_addr_len) < 0) {
         }
         st->sent_time[dport] = get_time_ns();
 out:
@@ -276,7 +274,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
         char src_str[INET6_ADDRSTRLEN];
         struct tcphdr *tcph;
         u_char ttl;
-        u_short port;
+        int port;
         u_int64_t rtt;
         char time_buf[64];
         const char *os_guess;
@@ -289,7 +287,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         struct ip *orig_iph;
                         int orig_iph_len;
                         struct udphdr *udph;
-                        u_short port;
+                        int port;
 
                         iph = (struct ip *)buf;
                         hlen = iph->ip_hl << 2;
@@ -306,13 +304,15 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                                 udph = (struct udphdr *)((u_char *)orig_iph +
                                                          orig_iph_len);
                                 port = ntohs(udph->uh_dport);
-                                st->closed_ports[port] = true;
+                                if (port >= 0 && port < 65536) {
+                                        st->closed_ports[port] = true;
+                                }
                         }
                 } else {
                         struct icmp6_hdr *icmph;
                         struct ip6_hdr *orig_iph;
                         struct udphdr *udph;
-                        u_short port;
+                        int port;
 
                         if (len < 8)
                                 goto out;
@@ -325,7 +325,9 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                                 udph =
                                     (struct udphdr *)((u_char *)orig_iph + 40);
                                 port = ntohs(udph->uh_dport);
-                                st->closed_ports[port] = true;
+                                if (port >= 0 && port < 65536) {
+                                        st->closed_ports[port] = true;
+                                }
                         }
                 }
                 goto out;
@@ -361,6 +363,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                 goto out;
 
         port = ntohs(tcph->th_sport);
+        if (port < 0 || port >= 65536)
+                goto out;
         if (port < config->start_port || port > config->end_port)
                 goto out;
 
@@ -383,8 +387,9 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                         }
 
                         if (config->banner_grab && !config->udp) {
-                                grab_banner(config, port, st->banners[port],
-                                            sizeof(st->banners[port]));
+                                grab_banner(config, port,
+                                            st->banners[port & 0xFFFF],
+                                            sizeof(st->banners[port & 0xFFFF]));
                         }
 
                         if (!config->json_output) {
@@ -428,7 +433,7 @@ drain_packets(const pscan_config_t *config, pscan_state_t *st)
         while (true) {
                 struct pollfd pfd;
                 ssize_t len;
-                pfd.fd = net_get_fd(st->sock);
+                pfd.fd = get_socket_fd(st->sock);
                 pfd.events = POLLIN;
                 pfd.revents = 0;
 
@@ -436,8 +441,7 @@ drain_packets(const pscan_config_t *config, pscan_state_t *st)
                         break;
 
                 src_len = sizeof(src);
-                len =
-                    net_recv_ip_raw(st->sock, buf, sizeof(buf), &src, &src_len);
+                len = recv_ip_raw(st->sock, buf, sizeof(buf), &src, &src_len);
                 if (len < 0)
                         break;
                 process_packet(config, st, buf, len, &src);
@@ -463,8 +467,8 @@ pscan_run(const pscan_config_t *config)
         init_pscan_state(config, st);
 
         if (config->udp) {
-                st->sock = net_open_icmp_socket(config->target_addr.ss_family);
-                if (!st->sock || net_is_dgram(st->sock)) {
+                st->sock = open_icmp_socket(config->target_addr.ss_family);
+                if (!st->sock || is_dgram(st->sock)) {
                         die("UDP scan requires root for raw ICMP socket");
                 }
                 st->send_fd =
@@ -473,8 +477,8 @@ pscan_run(const pscan_config_t *config)
                         die("Failed to open UDP socket");
                 }
         } else {
-                st->sock = net_open_ip_raw_socket(config->target_addr.ss_family,
-                                                  IPPROTO_TCP);
+                st->sock = open_ip_raw_socket(config->target_addr.ss_family,
+                                              IPPROTO_TCP);
                 st->send_fd = -1;
                 if (!st->sock) {
                         die("Failed to open raw TCP socket. Are you root?");
@@ -483,7 +487,7 @@ pscan_run(const pscan_config_t *config)
 
         if (config->bind_iface) {
 #ifdef SO_BINDTODEVICE
-                if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
+                if (setsockopt(get_socket_fd(st->sock), SOL_SOCKET,
                                SO_BINDTODEVICE, config->bind_iface,
                                strlen(config->bind_iface)) < 0) {
                         die("Failed to bind to interface %s",
@@ -561,7 +565,7 @@ pscan_run(const pscan_config_t *config)
 
         start_wait = get_time_ns();
         while (get_time_ns() - start_wait < config->timeout_ns) {
-                struct pollfd pfd = {net_get_fd(st->sock), POLLIN, 0};
+                struct pollfd pfd = {get_socket_fd(st->sock), POLLIN, 0};
                 if (poll(&pfd, 1, 100) > 0) {
                         drain_packets(config, st);
                 }
@@ -629,7 +633,7 @@ pscan_run(const pscan_config_t *config)
         }
 
         free(port_list);
-        net_close_raw_socket(st->sock);
+        close_raw_socket(st->sock);
         if (st->send_fd >= 0) {
                 close(st->send_fd);
         }

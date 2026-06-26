@@ -156,7 +156,7 @@ arping_cli_main(int c, char **av)
                 goto err;
         }
 
-        if (!net_get_iface_mac(config.iface, config.source_mac)) {
+        if (!get_iface_mac(config.iface, config.source_mac)) {
                 die("Failed to get MAC address for interface %s", config.iface);
         }
 
@@ -164,12 +164,12 @@ arping_cli_main(int c, char **av)
 
                 config.source_ip = 0;
         } else if (source_ip_str) {
-                if (!net_resolve_ipv4(source_ip_str, &config.source_ip)) {
+                if (!resolve_ipv4(source_ip_str, &config.source_ip)) {
                         die("Invalid source IP address or hostname: %s",
                             source_ip_str);
                 }
         } else {
-                if (!net_get_iface_ip(config.iface, &config.source_ip)) {
+                if (!get_iface_addr(config.iface, &config.source_ip)) {
                         log_warn("Failed to get IP address for interface %s, "
                                  "using 0.0.0.0",
                                  config.iface);
@@ -179,7 +179,7 @@ arping_cli_main(int c, char **av)
 
         if (config.gateway) {
 
-                if (!net_get_default_gateway(config.iface, &config.target_ip)) {
+                if (!get_default_gateway(config.iface, &config.target_ip)) {
                         die("Failed to automatically determine the default "
                             "gateway");
                 }
@@ -192,7 +192,7 @@ arping_cli_main(int c, char **av)
                         goto err;
                 }
                 target_ip_str = *av;
-                if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
+                if (!resolve_ipv4(target_ip_str, &config.target_ip)) {
                         die("Invalid target IP address or hostname: %s",
                             target_ip_str);
                 }

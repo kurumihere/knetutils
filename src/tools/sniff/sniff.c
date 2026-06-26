@@ -405,7 +405,7 @@ sniff_run(const sniff_config_t *config)
 
         st.packets_captured = 0;
         st.pcap_fp = NULL;
-        st.sock = net_open_raw_socket(config->iface, ETH_P_ALL);
+        st.sock = open_raw_socket(config->iface, ETH_P_ALL);
 
         if (!st.sock) {
                 die("Failed to open raw socket. Are you root?");
@@ -434,7 +434,7 @@ sniff_run(const sniff_config_t *config)
                 }
         }
 
-        if (!net_set_promiscuous(st.sock)) {
+        if (!set_promiscuous(st.sock)) {
                 log_warn("Failed to set promiscuous mode. Sniffing might be "
                          "limited.");
         }
@@ -451,7 +451,7 @@ sniff_run(const sniff_config_t *config)
                         break;
                 }
 
-                n = net_recv_packet(st.sock, buf, sizeof(buf));
+                n = recv_packet(st.sock, buf, sizeof(buf));
                 if (n <= 0) {
                         continue;
                 }
@@ -467,7 +467,7 @@ sniff_run(const sniff_config_t *config)
         }
 
         if (st.sock) {
-                net_close_raw_socket(st.sock);
+                close_raw_socket(st.sock);
         }
         printf("\n");
         log_info("Captured %d packets", st.packets_captured);

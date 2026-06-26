@@ -89,7 +89,7 @@ struct net_socket {
 #endif
 
 bool
-net_get_iface_mac(const char *iface, u_char *mac)
+get_iface_mac(const char *iface, u_char *mac)
 {
 #ifdef __linux__
         int sock;
@@ -140,7 +140,7 @@ out:
 }
 
 bool
-net_get_iface_ip(const char *iface, u_int *ip)
+get_iface_addr(const char *iface, u_int *ip)
 {
         struct ifaddrs *ifap, *ifa;
         bool found = false;
@@ -166,13 +166,13 @@ net_get_iface_ip(const char *iface, u_int *ip)
 }
 
 int
-net_get_iface_index(const char *iface)
+get_iface_index(const char *iface)
 {
         return if_nametoindex(iface);
 }
 
 net_socket_t *
-net_open_raw_socket(const char *iface, u_short protocol)
+open_raw_socket(const char *iface, u_short protocol)
 {
 #ifdef __linux__
         int fd;
@@ -185,7 +185,7 @@ net_open_raw_socket(const char *iface, u_short protocol)
                 return NULL;
         }
 
-        ifindex = net_get_iface_index(iface);
+        ifindex = get_iface_index(iface);
         if (ifindex == 0) {
                 goto err_close;
         }
@@ -201,7 +201,7 @@ net_open_raw_socket(const char *iface, u_short protocol)
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
-                log_err("net_open_raw_socket: memory allocation failed");
+                log_err("open_raw_socket: memory allocation failed");
                 goto err_close;
         }
 
@@ -251,7 +251,7 @@ err_close:
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
-                log_err("net_open_raw_socket: memory allocation failed");
+                log_err("open_raw_socket: memory allocation failed");
                 goto err_close;
         }
 
@@ -263,7 +263,7 @@ err_close:
         sock->bpf_filled = 0;
 
         if (!sock->bpf_buf) {
-                log_err("net_open_raw_socket: memory allocation failed for "
+                log_err("open_raw_socket: memory allocation failed for "
                         "bpf_buf");
                 goto err_free;
         }
@@ -279,7 +279,7 @@ err_close:
 }
 
 net_socket_t *
-net_open_icmp_socket(int family)
+open_icmp_socket(int family)
 {
         int proto;
         bool is_dgram;
@@ -301,7 +301,7 @@ net_open_icmp_socket(int family)
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
-                log_err("net_open_icmp_socket: memory allocation failed");
+                log_err("open_icmp_socket: memory allocation failed");
                 goto err_close;
         }
 
@@ -319,7 +319,7 @@ err_close:
 }
 
 bool
-net_is_dgram(net_socket_t *sock)
+is_dgram(net_socket_t *sock)
 {
         if (!sock) {
                 return false;
@@ -328,7 +328,7 @@ net_is_dgram(net_socket_t *sock)
 }
 
 void
-net_close_raw_socket(net_socket_t *sock)
+close_raw_socket(net_socket_t *sock)
 {
         if (!sock) {
                 return;
@@ -342,7 +342,7 @@ net_close_raw_socket(net_socket_t *sock)
 }
 
 bool
-net_set_promiscuous(net_socket_t *sock)
+set_promiscuous(net_socket_t *sock)
 {
 #ifdef __linux__
         struct packet_mreq mr;
@@ -365,8 +365,8 @@ net_set_promiscuous(net_socket_t *sock)
 }
 
 ssize_t
-net_send_packet(net_socket_t *sock, const void *buf, size_t len,
-                const u_char *dst_mac)
+send_packet(net_socket_t *sock, const void *buf, size_t len,
+            const u_char *dst_mac)
 {
 #ifdef __linux__
         struct sockaddr_ll sll;
@@ -391,7 +391,7 @@ net_send_packet(net_socket_t *sock, const void *buf, size_t len,
 }
 
 ssize_t
-net_recv_packet(net_socket_t *sock, void *buf, size_t len)
+recv_packet(net_socket_t *sock, void *buf, size_t len)
 {
 #ifdef __linux__
         return recvfrom(sock->fd, buf, len, 0, NULL, NULL);
@@ -423,21 +423,21 @@ net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 }
 
 ssize_t
-net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
-                     const struct sockaddr *dest, socklen_t dest_len)
+send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
+                 const struct sockaddr *dest, socklen_t dest_len)
 {
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
 ssize_t
-net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
-                     struct sockaddr_storage *src, socklen_t *src_len)
+recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
+                 struct sockaddr_storage *src, socklen_t *src_len)
 {
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
 int
-net_get_fd(net_socket_t *sock)
+get_socket_fd(net_socket_t *sock)
 {
         if (!sock) {
                 return -1;
@@ -446,8 +446,8 @@ net_get_fd(net_socket_t *sock)
 }
 
 bool
-net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
-                 socklen_t *ss_len)
+resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
+             socklen_t *ss_len)
 {
         struct addrinfo hints, *res;
 
@@ -466,7 +466,7 @@ net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
 }
 
 bool
-net_resolve_ipv4(const char *hostname, u_int *ip)
+resolve_ipv4(const char *hostname, u_int *ip)
 {
         struct addrinfo hints, *res;
         struct sockaddr_in *ipv4;
@@ -486,7 +486,7 @@ net_resolve_ipv4(const char *hostname, u_int *ip)
 }
 
 bool
-net_parse_mac(const char *mac_str, u_char *mac)
+parse_mac(const char *mac_str, u_char *mac)
 {
         u_int values[MAC_OCTETS];
         int i;
@@ -504,7 +504,7 @@ net_parse_mac(const char *mac_str, u_char *mac)
 }
 
 bool
-net_get_default_gateway(const char *iface, u_int *gateway_ip)
+get_default_gateway(const char *iface, u_int *gateway_ip)
 {
 #ifdef __linux__
         FILE *fp;
@@ -551,7 +551,7 @@ out:
 
         buf = calloc(1, len);
         if (!buf) {
-                log_err("net_get_default_gateway: memory allocation failed");
+                log_err("get_default_gateway: memory allocation failed");
                 return false;
         }
 
@@ -608,7 +608,7 @@ out:
 }
 
 net_socket_t *
-net_open_ip_raw_socket(int family, int protocol)
+open_ip_raw_socket(int family, int protocol)
 {
         int fd;
         net_socket_t *sock;
@@ -620,7 +620,7 @@ net_open_ip_raw_socket(int family, int protocol)
 
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
-                log_err("net_open_ip_raw_socket: memory allocation failed");
+                log_err("open_ip_raw_socket: memory allocation failed");
                 goto err_close;
         }
 
@@ -638,22 +638,22 @@ err_close:
 }
 
 ssize_t
-net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
-                const struct sockaddr *dest, socklen_t dest_len)
+send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
+            const struct sockaddr *dest, socklen_t dest_len)
 {
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
 ssize_t
-net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
-                struct sockaddr_storage *src, socklen_t *src_len)
+recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
+            struct sockaddr_storage *src, socklen_t *src_len)
 {
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
 bool
-net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
-                      struct sockaddr_storage *src, socklen_t *src_len)
+get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
+                  struct sockaddr_storage *src, socklen_t *src_len)
 {
         int sock;
         struct sockaddr_storage dst_copy;
@@ -693,7 +693,7 @@ out:
 }
 
 u_short
-net_checksum(const void *b, int len)
+calculate_checksum(const void *b, int len)
 {
         const u_short *buf = b;
         u_int sum = 0;

@@ -142,9 +142,8 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                 {
                         struct icmp *inner_icp;
 
-                        if (len <
-                            (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
-                                      inner_hlen + ICMP_ERROR_HDR_OFFSET)) {
+                        if (len < (ssize_t)hlen + ICMP_ERROR_HDR_OFFSET +
+                                      inner_hlen + ICMP_ERROR_HDR_OFFSET) {
                                 goto out;
                         }
 
@@ -220,7 +219,7 @@ static void
 setup_traceroute_sockets(const traceroute_config_t *config,
                          traceroute_state_t *st)
 {
-        st->sock = net_open_icmp_socket(config->family);
+        st->sock = open_icmp_socket(config->family);
 
         if (!st->sock) {
                 die("Failed to open ICMP socket. Are you root?");
@@ -244,7 +243,7 @@ setup_traceroute_sockets(const traceroute_config_t *config,
                               &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
                     1) {
                         bind_addr.ss_family = AF_INET;
-                        if (bind(net_get_fd(st->sock),
+                        if (bind(get_socket_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in)) < 0) {
                                 die("Failed to bind to IP %s",
@@ -254,14 +253,14 @@ setup_traceroute_sockets(const traceroute_config_t *config,
                                      &((struct sockaddr_in6 *)&bind_addr)
                                           ->sin6_addr) == 1) {
                         bind_addr.ss_family = AF_INET6;
-                        if (bind(net_get_fd(st->sock),
+                        if (bind(get_socket_fd(st->sock),
                                  (struct sockaddr *)&bind_addr,
                                  sizeof(struct sockaddr_in6)) < 0) {
                                 die("Failed to bind to IP %s",
                                     config->bind_iface);
                         }
                 } else {
-                        if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
+                        if (setsockopt(get_socket_fd(st->sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
                                 die("Failed to bind to interface %s",
@@ -331,7 +330,7 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                 goto out;
         }
 
-        setsockopt(net_get_fd(st->sock), level, optname, &ttl_val,
+        setsockopt(get_socket_fd(st->sock), level, optname, &ttl_val,
                    sizeof(ttl_val));
 
         if (config->family == AF_INET) {
@@ -343,7 +342,8 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                 icp->icmp_seq = htons(st->seq);
                 icp->icmp_cksum = 0;
 
-                icp->icmp_cksum = net_checksum(st->packet, st->header_size);
+                icp->icmp_cksum =
+                    calculate_checksum(st->packet, st->header_size);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
 
@@ -354,9 +354,9 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                 icp->icmp6_cksum = 0;
         }
 
-        if (net_send_icmp_packet(st->sock, st->packet, st->header_size,
-                                 (struct sockaddr *)&config->target_addr,
-                                 config->target_addr_len) < 0) {
+        if (send_icmp_packet(st->sock, st->packet, st->header_size,
+                             (struct sockaddr *)&config->target_addr,
+                             config->target_addr_len) < 0) {
                 goto out;
         }
 
@@ -440,7 +440,7 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
         struct pollfd pfd;
         bool ret_val = false;
 
-        pfd.fd = net_get_fd(st->sock);
+        pfd.fd = get_socket_fd(st->sock);
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
@@ -468,8 +468,8 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                         continue;
                 }
 
-                n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
-                                         &src_addr, &src_addr_len);
+                n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
+                                     &src_addr, &src_addr_len);
 
                 if (n <= 0) {
                         continue;
@@ -590,7 +590,7 @@ traceroute_run(const traceroute_config_t *config)
                 close(st.udp_sock);
         }
 
-        net_close_raw_socket(st.sock);
+        close_raw_socket(st.sock);
 
         return EXIT_SUCCESS;
 }
