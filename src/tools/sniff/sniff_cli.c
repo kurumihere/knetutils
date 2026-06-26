@@ -12,6 +12,7 @@
 static const cli_option_t sniff_options[] = {
     {'I', "iface", "interface to sniff on (required)"},
     {'c', "count", "stop after receiving count packets"},
+    {'w', "file", "write packets to a PCAP file"},
     {'v', NULL,
      "increase verbosity (max level: 3, e.g. -vvv)\n-v   : show L4 headers "
      "(TCP/UDP/ICMP)\n-vv  : show L4 headers + payload hex-dump\n-vvv : show "
@@ -36,13 +37,16 @@ sniff_cli_main(int argc, char *argv[])
 
         memset(&config, 0, sizeof(config));
 
-        while ((opt = getopt(argc, argv, "I:c:vh")) != -1) {
+        while ((opt = getopt(argc, argv, "I:c:w:vh")) != -1) {
                 switch (opt) {
                 case 'I':
                         config.iface = optarg;
                         break;
                 case 'c':
                         config.max_packets = atoi(optarg);
+                        break;
+                case 'w':
+                        config.pcap_file = optarg;
                         break;
                 case 'v':
                         config.verbosity++;

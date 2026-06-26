@@ -15,11 +15,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifndef ETH_P_ALL
 #define ETH_P_ALL 0x0003
 #endif
+
+#define PCAP_MAGIC_NUMBER 0xa1b2c3d4
+#define PCAP_VERSION_MAJOR 2
+#define PCAP_VERSION_MINOR 4
+#define PCAP_LINKTYPE_ETHERNET 1
+#define PCAP_SNAPLEN 65535
+
+typedef struct {
+        uint32_t magic_number;
+        uint16_t version_major;
+        uint16_t version_minor;
+        int32_t thiszone;
+        uint32_t sigfigs;
+        uint32_t snaplen;
+        uint32_t network;
+} pcap_hdr_t;
+
+typedef struct {
+        uint32_t ts_sec;
+        uint32_t ts_usec;
+        uint32_t incl_len;
+        uint32_t orig_len;
+} pcaprec_hdr_t;
 
 static volatile sig_atomic_t keep_running = 1;
 
@@ -33,7 +57,28 @@ handle_sigint(int sig)
 typedef struct {
         net_socket_t *sock;
         int packets_captured;
+        FILE *pcap_fp;
 } sniff_state_t;
+
+static void
+write_pcap_packet(FILE *fp, const uint8_t *buf, ssize_t len)
+{
+        struct timespec ts;
+        pcaprec_hdr_t rec;
+
+        if (!fp)
+                return;
+
+        clock_gettime(CLOCK_REALTIME, &ts);
+        rec.ts_sec = (uint32_t)ts.tv_sec;
+        rec.ts_usec = (uint32_t)(ts.tv_nsec / NS_PER_US);
+        rec.incl_len = (uint32_t)len;
+        rec.orig_len = (uint32_t)len;
+
+        fwrite(&rec, sizeof(rec), 1, fp);
+        fwrite(buf, 1, len, fp);
+        fflush(fp);
+}
 
 static void
 print_hex_dump(const uint8_t *data, size_t len)
@@ -267,10 +312,32 @@ sniff_run(const sniff_config_t *config)
         sigaction(SIGQUIT, &sa, NULL);
 
         st.packets_captured = 0;
+        st.pcap_fp = NULL;
         st.sock = net_open_raw_socket(config->iface, ETH_P_ALL);
 
         if (!st.sock) {
                 die("Failed to open raw socket. Are you root?");
+        }
+
+        if (config->pcap_file) {
+                st.pcap_fp = fopen(config->pcap_file, "wb");
+                if (!st.pcap_fp) {
+                        log_warn("Failed to open PCAP file for writing: %s",
+                                 config->pcap_file);
+                } else {
+                        pcap_hdr_t hdr;
+                        memset(&hdr, 0, sizeof(hdr));
+                        hdr.magic_number = PCAP_MAGIC_NUMBER;
+                        hdr.version_major = PCAP_VERSION_MAJOR;
+                        hdr.version_minor = PCAP_VERSION_MINOR;
+                        hdr.thiszone = 0;
+                        hdr.sigfigs = 0;
+                        hdr.snaplen = PCAP_SNAPLEN;
+                        hdr.network = PCAP_LINKTYPE_ETHERNET;
+                        fwrite(&hdr, sizeof(hdr), 1, st.pcap_fp);
+                        log_info("Writing packets to PCAP file: %s",
+                                 config->pcap_file);
+                }
         }
 
         if (!net_set_promiscuous(st.sock)) {
@@ -291,7 +358,12 @@ sniff_run(const sniff_config_t *config)
                         continue;
 
                 process_packet(config, buf, n);
+                write_pcap_packet(st.pcap_fp, buf, n);
                 st.packets_captured++;
+        }
+
+        if (st.pcap_fp) {
+                fclose(st.pcap_fp);
         }
 
         net_close_raw_socket(st.sock);
