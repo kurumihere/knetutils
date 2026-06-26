@@ -1,7 +1,7 @@
 /***************************************************************************
  * ping_cli.c -- CLI wrapper for the ping utility                          *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ ************************IMPORTANT KNETUTILS LICENSE TERMS********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *
@@ -64,6 +64,11 @@ static const cli_option_t ping_options[] = {
     {'q', NULL, "quiet output"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
+/*
+ *		P R I N T _ U S A G E
+ *
+ * Logic for print_usage.
+ */
 
 static void
 print_usage(const char *prog_name)
@@ -86,6 +91,7 @@ ping_cli_main(int c, char **av)
         int ch;
         const char *target_ip_str;
 
+        /* Initialize memory. */
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
@@ -96,6 +102,7 @@ ping_cli_main(int c, char **av)
 
         config.family = AF_UNSPEC;
 
+        /* Loop until condition is met. */
         while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
                 switch (ch) {
                 case '4':
@@ -145,6 +152,7 @@ ping_cli_main(int c, char **av)
                         if (len > 32)
                                 len = 32;
                         config.pattern_len = len / 2;
+                        /* Iterate over elements. */
                         for (i = 0; i < config.pattern_len; i++) {
                                 unsigned int byte;
                                 sscanf(optarg + i * 2, "%2x", &byte);
@@ -164,9 +172,11 @@ ping_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
         }
@@ -176,6 +186,7 @@ ping_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
+                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -195,5 +206,6 @@ ping_cli_main(int c, char **av)
                     "ping may require root privileges to open raw sockets.");
         }
 
+        /* Return the result or status code. */
         return ping_run(&config);
 }

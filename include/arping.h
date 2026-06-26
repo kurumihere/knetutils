@@ -37,14 +37,20 @@
 #ifndef KNETUTILS_ARPING_H
 #define KNETUTILS_ARPING_H
 
+#include <net/ethernet.h>
 #include <stdbool.h>
 #include <sys/types.h>
 
+/*
+ *		A R P I N G _ C O N F I G
+ *
+ * Contains the configuration parameters for running an arping operation.
+ */
 typedef struct {
         const char *iface;
         u_int target_ip;
         u_int source_ip;
-        u_char source_mac[6];
+        u_char source_mac[ETH_ALEN];
         u_int count;
         u_int64_t timeout_ns;
         u_int64_t interval_ns;
@@ -59,6 +65,11 @@ typedef struct {
         const char *time_unit;
 } arping_config_t;
 
+/*
+ *		A R P I N G _ R U N
+ *
+ * Executes the arping utility with the provided configuration.
+ */
 int arping_run(const arping_config_t *config);
 
 #endif

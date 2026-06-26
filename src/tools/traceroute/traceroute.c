@@ -48,17 +48,30 @@
 #include <netinet/udp.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#define TRACEROUTE_PORT_BASE 33434
+#define RECV_BUF_SIZE 4096
+#define PID_MASK 0xFFFF
+#define IPV4_HLEN_SHIFT 2
+#define ICMP_ERROR_HDR_OFFSET 8
+
 static volatile sig_atomic_t keep_running = 1;
 
+/*
+ *		H A N D L E _ S I G I N T
+ *
+ * Signal handler for SIGINT, gracefully stops the trace loop.
+ */
 static void
 handle_sigint(int sig)
 {
         (void)sig;
+        /* Set flag to break out of the loop gracefully */
         keep_running = 0;
 }
 
@@ -76,6 +89,11 @@ typedef struct {
         struct sockaddr_storage last_hop_addr;
 } traceroute_state_t;
 
+/*
+ *		I S _ O U R _ P R O B E _ V 4
+ *
+ * Checks if the received ICMPv4 message is a response to our traceroute probe.
+ */
 static bool
 is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
@@ -84,43 +102,68 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
         int hlen;
         struct icmp *icp;
 
-        if (len < (ssize_t)sizeof(struct ip))
+        /* Verify buffer contains enough data for IPv4 header */
+        if (len < (ssize_t)sizeof(struct ip)) {
                 return false;
+        }
 
         ip_hdr = (struct ip *)buf;
-        hlen = ip_hdr->ip_hl << 2;
+        hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
 
-        if (len < (ssize_t)(hlen + sizeof(struct icmp)))
+        /* Verify buffer contains enough data for ICMP header */
+        if (len < (ssize_t)(hlen + sizeof(struct icmp))) {
                 return false;
+        }
 
         icp = (struct icmp *)(buf + hlen);
 
+        /* Handle ICMP Echo Reply (non-UDP probe) */
         if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
                 return icp->icmp_id == expected_id &&
                        icp->icmp_seq == expected_seq;
         }
 
+        /* Handle ICMP Time Exceeded or Destination Unreachable */
         if (icp->icmp_type == ICMP_TIMXCEED || icp->icmp_type == ICMP_UNREACH) {
                 struct ip *inner_ip;
                 int inner_hlen;
 
-                if (len < (ssize_t)(hlen + 8 + sizeof(struct ip)))
+                /* Ensure inner IP header is accessible */
+                if (len < (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
+                                    sizeof(struct ip))) {
                         return false;
+                }
 
                 inner_ip = (struct ip *)icp->icmp_data;
-                inner_hlen = inner_ip->ip_hl << 2;
+                inner_hlen = inner_ip->ip_hl << IPV4_HLEN_SHIFT;
 
+                /* Check inner UDP header */
                 if (use_udp) {
                         struct udphdr *inner_udp;
-                        if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
+
+                        /* Ensure inner UDP header is accessible */
+                        if (len <
+                            (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
+                                      inner_hlen + sizeof(struct udphdr))) {
                                 return false;
+                        }
+
                         inner_udp =
                             (struct udphdr *)((u_char *)inner_ip + inner_hlen);
                         return ntohs(inner_udp->uh_dport) == expected_port;
-                } else {
+                }
+
+                /* Check inner ICMP header */
+                {
                         struct icmp *inner_icp;
-                        if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
+
+                        /* Ensure inner ICMP header is accessible */
+                        if (len <
+                            (ssize_t)(hlen + ICMP_ERROR_HDR_OFFSET +
+                                      inner_hlen + ICMP_ERROR_HDR_OFFSET)) {
                                 return false;
+                        }
+
                         inner_icp =
                             (struct icmp *)((u_char *)inner_ip + inner_hlen);
                         return inner_icp->icmp_id == expected_id &&
@@ -131,42 +174,60 @@ is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
         return false;
 }
 
+/*
+ *		I S _ O U R _ P R O B E _ V 6
+ *
+ * Checks if the received ICMPv6 message is a response to our traceroute probe.
+ */
 static bool
 is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
                 u_short expected_seq, bool use_udp, u_short expected_port)
 {
         struct icmp6_hdr *icp;
 
-        if (len < (ssize_t)sizeof(struct icmp6_hdr))
+        /* Verify buffer contains enough data for ICMPv6 header */
+        if (len < (ssize_t)sizeof(struct icmp6_hdr)) {
                 return false;
+        }
 
         icp = (struct icmp6_hdr *)buf;
 
+        /* Handle ICMPv6 Echo Reply (non-UDP probe) */
         if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
                 return icp->icmp6_id == expected_id &&
                        icp->icmp6_seq == expected_seq;
         }
 
+        /* Handle ICMPv6 Time Exceeded or Destination Unreachable */
         if (icp->icmp6_type == ICMP6_TIME_EXCEEDED ||
             icp->icmp6_type == ICMP6_DST_UNREACH) {
                 struct ip6_hdr *inner_ip;
 
-                if (len < (ssize_t)(sizeof(struct icmp6_hdr) +
-                                    sizeof(struct ip6_hdr) + 8))
+                /* Ensure inner IPv6 header is accessible */
+                if (len <
+                    (ssize_t)(sizeof(struct icmp6_hdr) +
+                              sizeof(struct ip6_hdr) + ICMP_ERROR_HDR_OFFSET)) {
                         return false;
+                }
 
                 inner_ip = (struct ip6_hdr *)(icp + 1);
 
+                /* Check inner UDP header */
                 if (use_udp) {
-                        struct udphdr *inner_udp =
-                            (struct udphdr *)((u_char *)inner_ip +
-                                              sizeof(struct ip6_hdr));
+                        struct udphdr *inner_udp;
+
+                        inner_udp = (struct udphdr *)((u_char *)inner_ip +
+                                                      sizeof(struct ip6_hdr));
                         return ntohs(inner_udp->uh_dport) == expected_port;
-                } else {
-                        struct icmp6_hdr *inner_icp =
+                }
+
+                /* Check inner ICMPv6 header */
+                {
+                        struct icmp6_hdr *inner_icp;
+
+                        inner_icp =
                             (struct icmp6_hdr *)((u_char *)inner_ip +
                                                  sizeof(struct ip6_hdr));
-
                         return inner_icp->icmp6_id == expected_id &&
                                inner_icp->icmp6_seq == expected_seq;
                 }
@@ -175,16 +236,25 @@ is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
         return false;
 }
 
+/*
+ *		S E T U P _ T R A C E R O U T E _ S O C K E T S
+ *
+ * Open ICMP and optional UDP sockets for tracing.
+ */
 static void
 setup_traceroute_sockets(const traceroute_config_t *config,
                          traceroute_state_t *st)
 {
         st->sock = net_open_icmp_socket(config->family);
+
+        /* Ensure ICMP socket was created successfully */
         if (!st->sock) {
                 die("Failed to open ICMP socket. Are you root?");
         }
 
         st->udp_sock = -1;
+
+        /* Open UDP socket if requested */
         if (config->use_udp) {
                 st->udp_sock = socket(config->family, SOCK_DGRAM, IPPROTO_UDP);
                 if (st->udp_sock < 0) {
@@ -192,9 +262,12 @@ setup_traceroute_sockets(const traceroute_config_t *config,
                 }
         }
 
+        /* Bind to a specific interface or IP if requested */
         if (config->bind_iface) {
                 struct sockaddr_storage bind_addr;
+
                 memset(&bind_addr, 0, sizeof(bind_addr));
+
                 if (inet_pton(AF_INET, config->bind_iface,
                               &((struct sockaddr_in *)&bind_addr)->sin_addr) ==
                     1) {
@@ -216,6 +289,7 @@ setup_traceroute_sockets(const traceroute_config_t *config,
                                     config->bind_iface);
                         }
                 } else {
+                        /* Bind to interface device name */
                         if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
@@ -226,19 +300,30 @@ setup_traceroute_sockets(const traceroute_config_t *config,
         }
 }
 
+/*
+ *		I N I T _ T R A C E R O U T E _ S T A T E
+ *
+ * Initialize state structure and allocate packet buffer.
+ */
 static void
 init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
 {
+        /* Ensure the entire state structure is zero-initialized */
         memset(st, 0, sizeof(*st));
-        st->pid = getpid() & 0xFFFF;
+
+        st->pid = getpid() & PID_MASK;
         st->seq = 1;
 
         st->header_size = (config->family == AF_INET6)
                               ? sizeof(struct icmp6_hdr)
                               : sizeof(struct icmp);
+
         st->packet = calloc(1, st->header_size);
-        if (!st->packet)
+
+        /* Ensure memory allocation succeeded */
+        if (!st->packet) {
                 die("Memory allocation failed");
+        }
 }
 
 /*
@@ -258,9 +343,12 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
         optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
         ttl_val = ttl;
 
+        /* Send UDP probe */
         if (config->use_udp) {
                 struct sockaddr_storage target;
-                char dummy[1] = {0};
+                char dummy[1];
+
+                dummy[0] = 0;
 
                 setsockopt(st->udp_sock, level, optname, &ttl_val,
                            sizeof(ttl_val));
@@ -279,47 +367,64 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                            config->target_addr_len) < 0) {
                         return false;
                 }
-        } else {
-                setsockopt(net_get_fd(st->sock), level, optname, &ttl_val,
-                           sizeof(ttl_val));
 
-                if (config->family == AF_INET) {
-                        struct icmp *icp = (struct icmp *)st->packet;
-                        icp->icmp_type = ICMP_ECHO;
-                        icp->icmp_code = 0;
-                        icp->icmp_id = htons(st->pid);
-                        icp->icmp_seq = htons(st->seq);
-                        icp->icmp_cksum = 0;
-                        icp->icmp_cksum =
-                            net_checksum(st->packet, st->header_size);
-                } else {
-                        struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
-                        icp->icmp6_type = ICMP6_ECHO_REQUEST;
-                        icp->icmp6_code = 0;
-                        icp->icmp6_id = htons(st->pid);
-                        icp->icmp6_seq = htons(st->seq);
-                        icp->icmp6_cksum = 0;
-                }
-
-                if (net_send_icmp_packet(
-                        st->sock, st->packet, st->header_size,
-                        (struct sockaddr *)&config->target_addr,
-                        config->target_addr_len) < 0) {
-                        return false;
-                }
+                return true;
         }
+
+        /* Send ICMP probe */
+        setsockopt(net_get_fd(st->sock), level, optname, &ttl_val,
+                   sizeof(ttl_val));
+
+        if (config->family == AF_INET) {
+                struct icmp *icp = (struct icmp *)st->packet;
+
+                icp->icmp_type = ICMP_ECHO;
+                icp->icmp_code = 0;
+                icp->icmp_id = htons(st->pid);
+                icp->icmp_seq = htons(st->seq);
+                icp->icmp_cksum = 0;
+                icp->icmp_cksum = net_checksum(st->packet, st->header_size);
+        } else {
+                struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
+
+                icp->icmp6_type = ICMP6_ECHO_REQUEST;
+                icp->icmp6_code = 0;
+                icp->icmp6_id = htons(st->pid);
+                icp->icmp6_seq = htons(st->seq);
+                icp->icmp6_cksum = 0;
+        }
+
+        if (net_send_icmp_packet(st->sock, st->packet, st->header_size,
+                                 (struct sockaddr *)&config->target_addr,
+                                 config->target_addr_len) < 0) {
+                return false;
+        }
+
         return true;
 }
 
+/*
+ *		C H E C K _ I S _ T A R G E T
+ *
+ * Check if the received message indicates we have reached the destination
+ * target.
+ */
 static bool
 check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 ssize_t n)
 {
         if (config->family == AF_INET) {
-                struct ip *ip_hdr = (struct ip *)recv_buf;
-                int hlen = ip_hdr->ip_hl << 2;
+                struct ip *ip_hdr;
+                int hlen;
+
+                ip_hdr = (struct ip *)recv_buf;
+                hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
+
                 if (n >= (ssize_t)(hlen + sizeof(struct icmp))) {
                         struct icmp *icp = (struct icmp *)(recv_buf + hlen);
+
+                        /* Reached target if we get an Echo Reply or Port
+                         * Unreachable (UDP) */
                         if (icp->icmp_type == ICMP_ECHOREPLY ||
                             (config->use_udp &&
                              icp->icmp_type == ICMP_UNREACH)) {
@@ -329,6 +434,9 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
         } else {
                 if (n >= (ssize_t)sizeof(struct icmp6_hdr)) {
                         struct icmp6_hdr *icp = (struct icmp6_hdr *)recv_buf;
+
+                        /* Reached target if we get an Echo Reply or Port
+                         * Unreachable (UDP) */
                         if (icp->icmp6_type == ICMP6_ECHO_REPLY ||
                             (config->use_udp &&
                              icp->icmp6_type == ICMP6_DST_UNREACH)) {
@@ -336,21 +444,31 @@ check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                         }
                 }
         }
+
         return false;
 }
 
+/*
+ *		P R I N T _ H O P _ I N F O
+ *
+ * Print the hostname and IP address of the intermediate router or final hop.
+ */
 static void
 print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
                struct sockaddr_storage *src_addr, socklen_t src_addr_len)
 {
+        /* Only print hop info if it's different from the previous hop in this
+         * TTL round */
         if (memcmp(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr)) !=
             0) {
                 char host_str[NI_MAXHOST];
                 char ip_str[INET6_ADDRSTRLEN];
 
+                /* Retrieve numeric IP address */
                 getnameinfo((struct sockaddr *)src_addr, src_addr_len, ip_str,
                             sizeof(ip_str), NULL, 0, NI_NUMERICHOST);
 
+                /* Resolve hostname if requested and possible */
                 if (config->resolve_hostnames &&
                     getnameinfo((struct sockaddr *)src_addr, src_addr_len,
                                 host_str, sizeof(host_str), NULL, 0,
@@ -360,6 +478,7 @@ print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
                         printf("%s  ", ip_str);
                 }
 
+                /* Remember this hop address to avoid duplicate printing */
                 memcpy(&st->last_hop_addr, src_addr, sizeof(st->last_hop_addr));
         }
 }
@@ -379,11 +498,12 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
         pfd.fd = net_get_fd(st->sock);
         pfd.events = POLLIN;
 
+        /* Wait for and process incoming packets until timeout */
         while (get_time_ns() < wait_until && keep_running) {
                 int64_t timeout_ns;
                 int timeout_ms;
                 int ret;
-                __attribute__((aligned(8))) u_char recv_buf[4096];
+                __attribute__((aligned(8))) u_char recv_buf[RECV_BUF_SIZE];
                 struct sockaddr_storage src_addr;
                 socklen_t src_addr_len = sizeof(src_addr);
                 ssize_t n;
@@ -393,19 +513,27 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                 char time_buf[64];
 
                 timeout_ns = wait_until - get_time_ns();
-                if (timeout_ns <= 0)
+                if (timeout_ns <= 0) {
                         break;
+                }
 
                 timeout_ms = timeout_ns / NS_PER_MS;
                 ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-                if (ret <= 0 || !(pfd.revents & POLLIN))
+
+                /* Ignore timeouts and errors */
+                if (ret <= 0 || !(pfd.revents & POLLIN)) {
                         continue;
+                }
 
                 n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
                                          &src_addr, &src_addr_len);
-                if (n <= 0)
-                        continue;
 
+                /* Ignore empty packets */
+                if (n <= 0) {
+                        continue;
+                }
+
+                /* Validate packet matches our expected identifiers */
                 if (config->family == AF_INET) {
                         is_mine = is_our_probe_v4(recv_buf, n, htons(st->pid),
                                                   htons(st->seq),
@@ -416,19 +544,22 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                                                   config->use_udp, dest_port);
                 }
 
-                if (!is_mine)
+                if (!is_mine) {
                         continue;
+                }
 
-                /* Calculate the round-trip time for this hop.  */
+                /* Calculate the round-trip time for this hop */
                 recv_time = get_time_ns();
                 rtt = time_diff_ns(send_time, recv_time);
 
                 print_hop_info(config, st, &src_addr, src_addr_len);
 
+                /* Format and print the RTT */
                 format_time(rtt, NULL, time_buf, sizeof(time_buf));
                 printf("%s  ", time_buf);
                 fflush(stdout);
 
+                /* Mark target reached if appropriate */
                 if (check_is_target(config, recv_buf, n)) {
                         st->target_reached = true;
                 }
@@ -439,6 +570,11 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
         return false;
 }
 
+/*
+ *		T R A C E R O U T E _ R U N
+ *
+ * Main traceroute loop, incrementing TTL and awaiting replies.
+ */
 int
 traceroute_run(const traceroute_config_t *config)
 {
@@ -448,6 +584,7 @@ traceroute_run(const traceroute_config_t *config)
         u_char ttl;
         u_char probe;
 
+        /* Register signal handlers to gracefully shut down on interrupt */
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
@@ -457,6 +594,7 @@ traceroute_run(const traceroute_config_t *config)
         init_traceroute_state(config, &st);
         setup_traceroute_sockets(config, &st);
 
+        /* Drop privileges for security */
         if (setgid(getgid()) != 0) {
                 log_warn("Failed to drop group privileges");
         }
@@ -464,12 +602,14 @@ traceroute_run(const traceroute_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
+        /* Retrieve human-readable target string for printing */
         getnameinfo((struct sockaddr *)&config->target_addr,
                     config->target_addr_len, target_str, sizeof(target_str),
                     NULL, 0, NI_NUMERICHOST);
 
         printf("traceroute to %s, %u hops max\n", target_str, config->max_ttl);
 
+        /* Loop through Time-To-Live (TTL) values */
         for (ttl = config->first_ttl;
              ttl <= config->max_ttl && keep_running && !st.target_reached;
              ttl++) {
@@ -481,13 +621,17 @@ traceroute_run(const traceroute_config_t *config)
                 printf("%2u  ", ttl);
                 fflush(stdout);
 
+                /* Reset last hop address for the new TTL */
                 memset(&st.last_hop_addr, 0, sizeof(st.last_hop_addr));
 
+                /* Send queries for the current TTL */
                 for (probe = 0; probe < config->queries && keep_running;
                      probe++) {
-                        dest_port = 33434 + (ttl - 1) * config->queries + probe;
+                        dest_port = TRACEROUTE_PORT_BASE +
+                                    (ttl - 1) * config->queries + probe;
                         send_time = get_time_ns();
 
+                        /* Skip and increment seq if send fails */
                         if (!send_traceroute_probe(config, &st, ttl,
                                                    dest_port)) {
                                 printf("* ");
@@ -497,9 +641,12 @@ traceroute_run(const traceroute_config_t *config)
                         }
 
                         wait_until = send_time + config->timeout_ns;
+
+                        /* Await and process any response */
                         got_reply = recv_traceroute_reply(
                             config, &st, wait_until, send_time, dest_port);
 
+                        /* Print timeout marker if no response */
                         if (!got_reply) {
                                 printf("* ");
                                 fflush(stdout);
@@ -507,13 +654,18 @@ traceroute_run(const traceroute_config_t *config)
 
                         st.seq++;
                 }
+
                 printf("\n");
         }
 
+        /* Clean up resources */
         free(st.packet);
+
         if (st.udp_sock >= 0) {
                 close(st.udp_sock);
         }
+
         net_close_raw_socket(st.sock);
+
         return EXIT_SUCCESS;
 }

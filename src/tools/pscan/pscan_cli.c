@@ -1,7 +1,7 @@
 /***************************************************************************
  * pscan_cli.c -- CLI wrapper for the pscan utility                        *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ ************************IMPORTANT KNETUTILS LICENSE TERMS********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *
@@ -57,6 +57,11 @@ static const cli_option_t pscan_options[] = {
     {'I', "iface/ip", "bind to a specific interface or IP address"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
+/*
+ *		P R I N T _ U S A G E
+ *
+ * Logic for print_usage.
+ */
 
 static void
 print_usage(const char *prog_name)
@@ -79,6 +84,7 @@ pscan_cli_main(int c, char **av)
         int ch;
         const char *target_ip_str;
 
+        /* Initialize memory. */
         memset(&config, 0, sizeof(config));
 
         config.family = AF_UNSPEC;
@@ -86,6 +92,7 @@ pscan_cli_main(int c, char **av)
         config.start_port = 1;
         config.end_port = 1024;
 
+        /* Loop until condition is met. */
         while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
                 switch (ch) {
                 case 'u':
@@ -111,6 +118,7 @@ pscan_cli_main(int c, char **av)
                         break;
                 case 'p': {
                         char *dash = strchr(optarg, '-');
+                        /* Check condition and handle accordingly. */
                         if (dash) {
                                 *dash = '\0';
                                 config.start_port = (u_short)atoi(optarg);
@@ -136,9 +144,11 @@ pscan_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
         }
@@ -148,6 +158,7 @@ pscan_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
+                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -158,5 +169,6 @@ pscan_cli_main(int c, char **av)
                 die("Invalid target IP address or hostname: %s", target_ip_str);
         }
 
+        /* Return the result or status code. */
         return pscan_run(&config);
 }

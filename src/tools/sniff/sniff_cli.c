@@ -56,12 +56,19 @@ static const cli_option_t sniff_options[] = {
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
 
+/*
+ *		P R I N T _ U S A G E
+ *
+ * Print the usage instructions for the sniff CLI utility.
+ */
 static void
 print_usage(const char *prog_name)
 {
         cli_app_t app = {.prog_name = prog_name,
                          .usage_args = "[options]",
                          .options = sniff_options};
+
+        /* Delegate to common CLI help printer */
         cli_print_help(&app);
 }
 
@@ -75,9 +82,14 @@ sniff_cli_main(int c, char **av)
 {
         sniff_config_t config;
         int ch;
+        const char *prog_name;
 
+        prog_name = *av;
+
+        /* Ensure configuration is fully zero-initialized */
         memset(&config, 0, sizeof(config));
 
+        /* Parse CLI options using getopt */
         while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
                 switch (ch) {
                 case 'I':
@@ -93,23 +105,30 @@ sniff_cli_main(int c, char **av)
                         config.verbosity++;
                         break;
                 case 'h':
-                        print_usage(*av);
+                        print_usage(prog_name);
                         return EXIT_SUCCESS;
                 default:
-                        print_usage(*av);
+                        print_usage(prog_name);
                         return EXIT_FAILURE;
                 }
         }
 
+        /* Adjust argument counts using strict pointer arithmetic */
+        c -= optind;
+        av += optind;
+
+        /* The interface flag is mandatory for sniffing */
         if (!config.iface) {
                 log_err("Interface is required (-I)");
-                print_usage(*av);
+                print_usage(prog_name);
                 return EXIT_FAILURE;
         }
 
+        /* Check for root permissions */
         if (getuid() != 0) {
                 log_warn("sniff requires root privileges to open raw sockets.");
         }
 
+        /* Delegate to the core run logic */
         return sniff_run(&config);
 }

@@ -57,12 +57,19 @@ static const cli_option_t tcping_options[] = {
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
 
+/*
+ *		P R I N T _ U S A G E
+ *
+ * Print the usage instructions for the tcping CLI utility.
+ */
 static void
 print_usage(const char *prog_name)
 {
         cli_app_t app = {.prog_name = prog_name,
                          .usage_args = "[options] <destination> <port>",
                          .options = tcping_options};
+
+        /* Delegate to common CLI help printer */
         cli_print_help(&app);
 }
 
@@ -77,7 +84,11 @@ tcping_cli_main(int c, char **av)
         tcping_config_t config;
         int ch;
         const char *target_ip_str;
+        const char *prog_name;
 
+        prog_name = *av;
+
+        /* Ensure configuration is fully zero-initialized */
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
@@ -85,6 +96,7 @@ tcping_cli_main(int c, char **av)
         config.interval_ns = NS_PER_S;
         config.family = AF_UNSPEC;
 
+        /* Parse CLI options using getopt */
         while ((ch = getopt(c, av, "46c:W:i:I:qh")) != -1) {
                 switch (ch) {
                 case '4':
@@ -110,44 +122,54 @@ tcping_cli_main(int c, char **av)
                         config.quiet = true;
                         break;
                 case 'h':
-                        print_usage(*av);
+                        print_usage(prog_name);
                         return EXIT_SUCCESS;
                 default:
-                        print_usage(*av);
+                        print_usage(prog_name);
                         return EXIT_FAILURE;
                 }
         }
 
+        /* Adjust argument counts using strict pointer arithmetic */
         c -= optind;
         av += optind;
 
+        /* Verify destination and port positional arguments */
         if (c < 1) {
                 log_err("Target IP/hostname is required");
+                print_usage(prog_name);
                 return EXIT_FAILURE;
         }
 
         if (c < 2) {
                 log_err("Target port is required");
+                print_usage(prog_name);
                 return EXIT_FAILURE;
         }
 
+        /* Extract target IP and port using strict pointer dereferencing */
         target_ip_str = *av;
         config.port = (u_short)atoi(*(av + 1));
 
+        /* Ensure valid port parsing */
         if (config.port == 0) {
                 die("Invalid port: %s", *(av + 1));
         }
 
+        /* Attempt to resolve the provided hostname or IP */
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
         }
+
         config.family = config.target_addr.ss_family;
 
+        /* Check for root permissions */
         if (getuid() != 0) {
                 log_warn(
                     "tcping requires root privileges to open raw sockets.");
         }
 
+        /* Delegate to the core run logic */
         return tcping_run(&config);
 }

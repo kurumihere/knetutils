@@ -41,6 +41,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+/*
+ *		T R A C E R O U T E _ C O N F I G
+ *
+ * Contains the configuration parameters for running a traceroute operation.
+ */
 typedef struct {
         u_char first_ttl;
         u_char max_ttl;
@@ -54,6 +59,11 @@ typedef struct {
         bool use_udp;
 } traceroute_config_t;
 
+/*
+ *		T R A C E R O U T E _ R U N
+ *
+ * Executes the traceroute utility with the provided configuration.
+ */
 int traceroute_run(const traceroute_config_t *config);
 
 #endif

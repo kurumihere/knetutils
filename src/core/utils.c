@@ -50,6 +50,7 @@ log_err(const char *fmt, ...)
 {
         va_list args;
 
+        /* Initialize variadic arguments and print error prefix */
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
@@ -67,6 +68,7 @@ log_warn(const char *fmt, ...)
 {
         va_list args;
 
+        /* Initialize variadic arguments and print warning prefix */
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
@@ -84,6 +86,7 @@ log_info(const char *fmt, ...)
 {
         va_list args;
 
+        /* Initialize variadic arguments and print info prefix */
         va_start(args, fmt);
         fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
         vfprintf(stdout, fmt, args);
@@ -101,11 +104,14 @@ die(const char *fmt, ...)
 {
         va_list args;
 
+        /* Print the fatal error message */
         va_start(args, fmt);
         fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
         vfprintf(stderr, fmt, args);
         fprintf(stderr, "\n");
         va_end(args);
+
+        /* Terminate the program immediately */
         exit(EXIT_FAILURE);
 }
 
@@ -118,9 +124,12 @@ u_int64_t
 get_time_ns(void)
 {
         struct timespec ts;
+
+        /* Attempt to get the monotonic clock time */
         if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
                 die("clock_gettime failed");
         }
+
         return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
 }
 
@@ -132,8 +141,10 @@ get_time_ns(void)
 u_int64_t
 time_diff_ns(u_int64_t start, u_int64_t end)
 {
-        if (end < start)
+        /* Prevent underflow if clocks somehow went backwards */
+        if (end < start) {
                 return 0;
+        }
         return end - start;
 }
 
@@ -146,6 +157,7 @@ const char *
 format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
             size_t buf_size)
 {
+        /* If the user explicitly requested a specific unit format */
         if (unit_choice) {
                 if (strcmp(unit_choice, "ns") == 0) {
                         snprintf(buf, buf_size, "%llu ns",
@@ -163,6 +175,7 @@ format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
                 }
         }
 
+        /* Otherwise, auto-scale the metric based on magnitude */
         if (time_ns < NS_PER_US) {
                 snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
         } else if (time_ns < NS_PER_MS) {
@@ -172,5 +185,6 @@ format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
                 snprintf(buf, buf_size, "%.3f ms",
                          (double)time_ns / (double)NS_PER_MS);
         }
+
         return buf;
 }

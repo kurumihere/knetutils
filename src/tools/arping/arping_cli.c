@@ -1,7 +1,7 @@
 /***************************************************************************
  * arping_cli.c -- CLI wrapper for the arping utility                      *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ ************************IMPORTANT KNETUTILS LICENSE TERMS********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *
@@ -64,6 +64,11 @@ static const cli_option_t arping_options[] = {
     {'q', NULL, "quiet output"},
     {'h', NULL, "print help and exit"},
     {0, NULL, NULL}};
+/*
+ *		P R I N T _ U S A G E
+ *
+ * Logic for print_usage.
+ */
 
 static void
 print_usage(const char *prog_name)
@@ -86,12 +91,14 @@ arping_cli_main(int c, char **av)
         int ch;
         const char *target_ip_str;
 
+        /* Initialize memory. */
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
         config.timeout_ns = NS_PER_S;
         config.interval_ns = NS_PER_S;
 
+        /* Loop until condition is met. */
         while ((ch = getopt(c, av, "I:c:w:i:S:qUdGCfAbu:h")) != -1) {
                 switch (ch) {
                 case 'I':
@@ -139,9 +146,11 @@ arping_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
         }
@@ -149,6 +158,7 @@ arping_cli_main(int c, char **av)
         if (!config.iface) {
                 log_err("Network interface is required (-I option)");
                 print_usage(*av);
+                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -157,6 +167,7 @@ arping_cli_main(int c, char **av)
 
         if (c < 1 && !config.gateway && !config.unsolicited) {
                 log_err("Target IP/hostname is required");
+                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -167,11 +178,13 @@ arping_cli_main(int c, char **av)
         if (config.dad) {
                 config.source_ip = 0;
         } else if (source_ip_str) {
+                /* Check condition and handle accordingly. */
                 if (!net_resolve_ipv4(source_ip_str, &config.source_ip)) {
                         die("Invalid source IP address or hostname: %s",
                             source_ip_str);
                 }
         } else {
+                /* Check condition and handle accordingly. */
                 if (!net_get_iface_ip(config.iface, &config.source_ip)) {
                         log_warn("Failed to get IP address for interface %s, "
                                  "using 0.0.0.0",
@@ -181,6 +194,7 @@ arping_cli_main(int c, char **av)
         }
 
         if (config.gateway) {
+                /* Check condition and handle accordingly. */
                 if (!net_get_default_gateway(config.iface, &config.target_ip)) {
                         die("Failed to automatically determine the default "
                             "gateway");
@@ -188,12 +202,15 @@ arping_cli_main(int c, char **av)
         } else if (config.unsolicited) {
                 config.target_ip = config.source_ip;
         } else {
+                /* Check condition and handle accordingly. */
                 if (c < 1) {
                         log_err("Missing destination IP address");
                         print_usage(*av);
+                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
                 target_ip_str = *av;
+                /* Check condition and handle accordingly. */
                 if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
                         die("Invalid target IP address or hostname: %s",
                             target_ip_str);
@@ -209,5 +226,6 @@ arping_cli_main(int c, char **av)
                     "arping may require root privileges to open raw sockets.");
         }
 
+        /* Return the result or status code. */
         return arping_run(&config);
 }

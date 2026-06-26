@@ -38,6 +38,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MIN_ARGS 1
+#define MIN_SUBCMD_ARGS 2
+
 int arping_cli_main(int c, char **av);
 int ping_cli_main(int c, char **av);
 int sniff_cli_main(int c, char **av);
@@ -54,6 +57,9 @@ static const char *
 get_basename(const char *path)
 {
         const char *base = strrchr(path, '/');
+
+        /* Return the character after the slash, or the whole path if no slash
+         */
         return base ? base + 1 : path;
 }
 
@@ -65,8 +71,11 @@ get_basename(const char *path)
 static void
 print_main_usage(void)
 {
+        /* Print the banner and usage instructions */
         fprintf(stderr, "knetutils - a collection of network utilities\n\n");
         fprintf(stderr, "Usage: knetutils <command> [args]\n\n");
+
+        /* Print the available commands */
         fprintf(stderr, "Commands:\n");
         fprintf(stderr, "  arping      discover and probe hosts on a local "
                         "network using ARP\n");
@@ -84,6 +93,8 @@ print_main_usage(void)
         fprintf(
             stderr,
             "  traceroute  print the route packets trace to network host\n\n");
+
+        /* Print the help hint */
         fprintf(stderr, "Run 'knetutils <command> -h' for more information on "
                         "a command.\n");
 }
@@ -99,11 +110,18 @@ main(int c, char **av)
         const char *prog_name;
         const char *cmd;
 
-        if (c < 1)
+        /* Ensure we have at least the program name in arguments */
+        if (c < MIN_ARGS) {
                 return EXIT_FAILURE;
+        }
 
+        /* Extract the basename of the executed binary */
         prog_name = get_basename(*av);
 
+        /*
+         * Check if the program was invoked by an alias.
+         * If the binary name matches a command, dispatch immediately.
+         */
         if (strcmp(prog_name, "arping") == 0) {
                 return arping_cli_main(c, av);
         } else if (strcmp(prog_name, "ping") == 0) {
@@ -118,12 +136,16 @@ main(int c, char **av)
                 return pscan_cli_main(c, av);
         }
 
-        if (c < 2) {
+        /* If no subcommand was provided, display help and exit */
+        if (c < MIN_SUBCMD_ARGS) {
                 print_main_usage();
                 return EXIT_FAILURE;
         }
 
+        /* Extract the subcommand from the arguments */
         cmd = *(av + 1);
+
+        /* Dispatch to the appropriate subcommand logic */
         if (strcmp(cmd, "arping") == 0) {
                 return arping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "ping") == 0) {
@@ -137,10 +159,12 @@ main(int c, char **av)
         } else if (strcmp(cmd, "pscan") == 0) {
                 return pscan_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
+                /* Handle global help request */
                 print_main_usage();
                 return EXIT_SUCCESS;
         }
 
+        /* Subcommand not recognized, print error and exit */
         fprintf(stderr, "knetutils: Unknown command '%s'\n", cmd);
         return EXIT_FAILURE;
 }

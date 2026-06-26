@@ -39,6 +39,12 @@
 
 #include <stdbool.h>
 
+/*
+ *		S N I F F _ C O N F I G
+ *
+ * Contains the configuration parameters for running a packet sniffing
+ * operation.
+ */
 typedef struct {
         const char *iface;
         int max_packets;
@@ -46,6 +52,11 @@ typedef struct {
         const char *pcap_file;
 } sniff_config_t;
 
+/*
+ *		S N I F F _ R U N
+ *
+ * Executes the sniff utility with the provided configuration.
+ */
 int sniff_run(const sniff_config_t *config);
 
 #endif

@@ -41,6 +41,14 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+/* Maximum length for a custom ping payload pattern */
+#define PING_MAX_PATTERN_LEN 16
+
+/*
+ *		P I N G _ C O N F I G
+ *
+ * Contains the configuration parameters for running a ping operation.
+ */
 typedef struct {
         u_int count;
         u_int64_t timeout_ns;
@@ -57,13 +65,18 @@ typedef struct {
         bool audible;
         bool adaptive;
         const char *bind_iface;
-        u_char pattern[16];
+        u_char pattern[PING_MAX_PATTERN_LEN];
         size_t pattern_len;
         u_int64_t deadline_ns;
         int tos;
         bool has_tos;
 } ping_config_t;
 
+/*
+ *		P I N G _ R U N
+ *
+ * Executes the ping utility with the provided configuration.
+ */
 int ping_run(const ping_config_t *config);
 
 #endif
