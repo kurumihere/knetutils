@@ -26,4 +26,6 @@ jobs:
         clang-format --dry-run --Werror src/core/*.c src/tools/*/*.c include/*.h
 
     - name: Test CLI Interfaces
-      run: bash tests/test_basic.sh
+      run: |
+        bash tests/test_basic.sh
+        bash tests/test_network.sh
