@@ -16,6 +16,7 @@ typedef struct {
         uint32_t rate_limit;
         bool udp;
         bool randomize;
+        bool json_output;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);

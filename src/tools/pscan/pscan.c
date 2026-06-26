@@ -24,6 +24,7 @@ typedef struct {
         char target_str[INET6_ADDRSTRLEN];
         uint16_t sport;
         uint64_t sent_time[65536];
+        uint64_t open_rtt[65536];
         bool open_ports[65536];
         bool closed_ports[65536];
 } pscan_state_t;
@@ -221,14 +222,19 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
                                 rtt = time_diff_ns(st->sent_time[port],
                                                    get_time_ns());
                         }
-                        char time_buf[64] = "N/A";
-                        if (rtt > 0) {
-                                format_time(rtt, NULL, time_buf,
-                                            sizeof(time_buf));
+                        st->open_rtt[port] = rtt;
+
+                        if (!config->json_output) {
+                                char time_buf[64] = "N/A";
+                                if (rtt > 0) {
+                                        format_time(rtt, NULL, time_buf,
+                                                    sizeof(time_buf));
+                                }
+                                printf(COLOR_BOLD COLOR_GREEN
+                                       "Port %u is open" COLOR_RESET
+                                       " (time=%s)\n",
+                                       port, time_buf);
                         }
-                        printf(COLOR_BOLD COLOR_GREEN
-                               "Port %u is open" COLOR_RESET " (time=%s)\n",
-                               port, time_buf);
                 }
         }
 }
@@ -308,8 +314,11 @@ pscan_run(const pscan_config_t *config)
 #endif
         }
 
-        log_info("Scanning %s ports %u to %u (rate: %u pps)...", st.target_str,
-                 config->start_port, config->end_port, config->rate_limit);
+        if (!config->json_output) {
+                log_info("Scanning %s ports %u to %u (rate: %u pps)...",
+                         st.target_str, config->start_port, config->end_port,
+                         config->rate_limit);
+        }
 
         num_ports = config->end_port - config->start_port + 1;
         port_list = malloc(num_ports * sizeof(uint16_t));
@@ -371,14 +380,46 @@ pscan_run(const pscan_config_t *config)
                 }
         }
 
-        if (config->udp) {
+        if (config->json_output) {
+                bool first = true;
+                printf("{\n");
+                printf("  \"target\": \"%s\",\n", st.target_str);
+                printf("  \"open_ports\": [\n");
                 for (port = config->start_port; port <= config->end_port;
                      port++) {
-                        if (!st.closed_ports[port]) {
-                                printf(COLOR_BOLD COLOR_YELLOW
-                                       "Port %u is open|filtered" COLOR_RESET
-                                       "\n",
-                                       port);
+                        if (st.open_ports[port] ||
+                            (config->udp && !st.closed_ports[port])) {
+                                if (!first) {
+                                        printf(",\n");
+                                }
+                                first = false;
+                                printf("    {\n");
+                                printf("      \"port\": %u", port);
+                                if (!config->udp && st.open_rtt[port] > 0) {
+                                        printf(",\n      \"rtt_ms\": %.3f\n",
+                                               (double)st.open_rtt[port] /
+                                                   (double)NS_PER_MS);
+                                } else if (config->udp) {
+                                        printf(",\n      \"state\": "
+                                               "\"open|filtered\"\n");
+                                } else {
+                                        printf("\n");
+                                }
+                                printf("    }");
+                        }
+                }
+                printf("\n  ]\n");
+                printf("}\n");
+        } else {
+                if (config->udp) {
+                        for (port = config->start_port;
+                             port <= config->end_port; port++) {
+                                if (!st.closed_ports[port]) {
+                                        printf(COLOR_BOLD COLOR_YELLOW
+                                               "Port %u is "
+                                               "open|filtered" COLOR_RESET "\n",
+                                               port);
+                                }
                         }
                 }
         }
