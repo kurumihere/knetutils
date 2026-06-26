@@ -18,6 +18,7 @@ typedef struct {
         bool randomize;
         bool json_output;
         bool banner_grab;
+        bool os_fingerprint;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);

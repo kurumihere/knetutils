@@ -11,6 +11,7 @@ static const cli_option_t pscan_options[] = {
     {'4', NULL, "use IPv4"},
     {'6', NULL, "use IPv6"},
     {'j', NULL, "output in JSON format"},
+    {'O', NULL, "enable OS fingerprinting"},
     {'p', "ports", "port range to scan (e.g. 1-1024 or 80)"},
     {'R', NULL, "randomize port scanning order"},
     {'r', "rate", "max packets per second (rate limit)"},
@@ -34,23 +35,26 @@ int
 pscan_cli_main(int argc, char **argv)
 {
         pscan_config_t config;
-        memset(&config, 0, sizeof(config));
-
-        config.family = AF_UNSPEC;
-        config.timeout_ns = 2000000000ULL;
-        config.start_port = 1;
-        config.end_port = 1024;
-
         int opt;
         const char *target_ip_str;
 
-        while ((opt = getopt(argc, argv, "46jp:r:W:I:Rsuh")) != -1) {
+        memset(&config, 0, sizeof(config));
+
+        config.family = AF_UNSPEC;
+        config.timeout_ns = 2 * NS_PER_S;
+        config.start_port = 1;
+        config.end_port = 1024;
+
+        while ((opt = getopt(argc, argv, "46jOp:r:W:I:Rsuh")) != -1) {
                 switch (opt) {
                 case 'u':
                         config.udp = true;
                         break;
                 case 's':
                         config.banner_grab = true;
+                        break;
+                case 'O':
+                        config.os_fingerprint = true;
                         break;
                 case 'j':
                         config.json_output = true;

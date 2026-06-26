@@ -26,9 +26,22 @@ typedef struct {
         uint64_t sent_time[65536];
         uint64_t open_rtt[65536];
         char banners[65536][128];
+        char os_guesses[65536][32];
         bool open_ports[65536];
         bool closed_ports[65536];
 } pscan_state_t;
+
+static const char *
+guess_os_from_ttl(uint8_t ttl)
+{
+        if (ttl == 0)
+                return "Unknown";
+        if (ttl <= 64)
+                return "Linux/Unix/macOS";
+        if (ttl <= 128)
+                return "Windows";
+        return "Cisco/Network Device";
+}
 
 struct ipv6_pseudo_header {
         struct in6_addr src_addr;
@@ -247,12 +260,20 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
                 return;
 
         struct tcphdr *tcph;
+        uint8_t ttl;
+        uint16_t port;
+        uint64_t rtt;
+        char time_buf[64];
+        const char *os_guess;
+
+        ttl = 0;
         if (src->ss_family == AF_INET) {
                 struct ip *iph = (struct ip *)buf;
                 int ip_hlen = iph->ip_hl << 2;
                 if (len < ip_hlen + (ssize_t)sizeof(struct tcphdr))
                         return;
                 tcph = (struct tcphdr *)(buf + ip_hlen);
+                ttl = iph->ip_ttl;
         } else {
                 tcph = (struct tcphdr *)buf;
         }
@@ -260,19 +281,26 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
         if (ntohs(tcph->th_dport) != st->sport)
                 return;
 
-        uint16_t port = ntohs(tcph->th_sport);
+        port = ntohs(tcph->th_sport);
         if (port < config->start_port || port > config->end_port)
                 return;
 
         if ((tcph->th_flags & TH_SYN) && (tcph->th_flags & TH_ACK)) {
                 if (!st->open_ports[port]) {
                         st->open_ports[port] = true;
-                        uint64_t rtt = 0;
+                        rtt = 0;
                         if (st->sent_time[port] > 0) {
                                 rtt = time_diff_ns(st->sent_time[port],
                                                    get_time_ns());
                         }
                         st->open_rtt[port] = rtt;
+
+                        if (config->os_fingerprint &&
+                            src->ss_family == AF_INET) {
+                                os_guess = guess_os_from_ttl(ttl);
+                                strncpy(st->os_guesses[port], os_guess,
+                                        sizeof(st->os_guesses[port]) - 1);
+                        }
 
                         if (config->banner_grab && !config->udp) {
                                 grab_banner(config, port, st->banners[port],
@@ -280,24 +308,30 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
                         }
 
                         if (!config->json_output) {
-                                char time_buf[64] = "N/A";
+                                strcpy(time_buf, "N/A");
                                 if (rtt > 0) {
                                         format_time(rtt, NULL, time_buf,
                                                     sizeof(time_buf));
                                 }
+
+                                printf(COLOR_BOLD COLOR_GREEN
+                                       "Port %u is open" COLOR_RESET
+                                       " (time=%s)",
+                                       port, time_buf);
+
+                                if (config->os_fingerprint &&
+                                    st->os_guesses[port][0] != '\0') {
+                                        printf(" [OS: %s]",
+                                               st->os_guesses[port]);
+                                }
+
                                 if (config->banner_grab &&
                                     st->banners[port][0] != '\0') {
-                                        printf(COLOR_BOLD COLOR_GREEN
-                                               "Port %u is open" COLOR_RESET
-                                               " (time=%s) [Banner: %s]\n",
-                                               port, time_buf,
+                                        printf(" [Banner: %s]",
                                                st->banners[port]);
-                                } else {
-                                        printf(COLOR_BOLD COLOR_GREEN
-                                               "Port %u is open" COLOR_RESET
-                                               " (time=%s)\n",
-                                               port, time_buf);
                                 }
+
+                                printf("\n");
                         }
                 }
         }
@@ -467,6 +501,12 @@ pscan_run(const pscan_config_t *config)
                                         printf(",\n      \"rtt_ms\": %.3f",
                                                (double)st->open_rtt[port] /
                                                    (double)NS_PER_MS);
+                                        if (config->os_fingerprint &&
+                                            st->os_guesses[port][0] != '\0') {
+                                                printf(",\n      \"os_guess\": "
+                                                       "\"%s\"",
+                                                       st->os_guesses[port]);
+                                        }
                                         if (config->banner_grab &&
                                             st->banners[port][0] != '\0') {
                                                 printf(",\n      \"banner\": "
