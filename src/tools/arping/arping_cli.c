@@ -158,7 +158,6 @@ arping_cli_main(int c, char **av)
 
         if (!net_get_iface_mac(config.iface, config.source_mac)) {
                 die("Failed to get MAC address for interface %s", config.iface);
-                /* NOT REACHED */
         }
 
         if (config.dad) {

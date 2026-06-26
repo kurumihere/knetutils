@@ -121,7 +121,6 @@ pscan_cli_main(int c, char **av)
                         if (config.start_port == 0 || config.end_port == 0 ||
                             config.start_port > config.end_port) {
                                 die("Invalid port range");
-                                /* NOT REACHED */
                         }
                         break;
                 }
@@ -158,7 +157,6 @@ pscan_cli_main(int c, char **av)
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
-                /* NOT REACHED */
         }
 
         ret = pscan_run(&config);

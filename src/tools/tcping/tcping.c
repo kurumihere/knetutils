@@ -115,7 +115,6 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
 
         if (!st->sock) {
                 die("Failed to open raw TCP socket. Are you root?");
-                /* NOT REACHED */
         }
 
         if (config->bind_iface) {
@@ -168,7 +167,6 @@ init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
                                    config->target_addr_len, &st->src_addr,
                                    &st->src_addr_len)) {
                 die("Failed to determine source IP for target");
-                /* NOT REACHED */
         }
 
         st->sport = EPHEMERAL_PORT_BASE + (getpid() % EPHEMERAL_PORT_RANGE);

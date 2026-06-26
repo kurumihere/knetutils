@@ -139,13 +139,11 @@ tcping_cli_main(int c, char **av)
 
         if (config.port == 0) {
                 die("Invalid port: %s", *(av + 1));
-                /* NOT REACHED */
         }
 
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
-                /* NOT REACHED */
         }
 
         config.family = config.target_addr.ss_family;

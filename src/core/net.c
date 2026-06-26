@@ -88,14 +88,6 @@ struct net_socket {
 
 #endif
 
-#ifndef ETH_ALEN
-#ifdef ETHER_ADDR_LEN
-#define ETH_ALEN ETHER_ADDR_LEN
-#else
-#define ETH_ALEN 6
-#endif
-#endif
-
 bool
 net_get_iface_mac(const char *iface, u_char *mac)
 {

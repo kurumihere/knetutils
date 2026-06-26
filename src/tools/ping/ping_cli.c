@@ -181,7 +181,6 @@ ping_cli_main(int c, char **av)
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
-                /* NOT REACHED */
         }
         config.family = config.target_addr.ss_family;
 

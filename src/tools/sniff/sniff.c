@@ -409,7 +409,6 @@ sniff_run(const sniff_config_t *config)
 
         if (!st.sock) {
                 die("Failed to open raw socket. Are you root?");
-                /* NOT REACHED */
         }
 
         if (config->pcap_file) {

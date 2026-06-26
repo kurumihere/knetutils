@@ -128,7 +128,6 @@ init_pscan_state(const pscan_config_t *config, pscan_state_t *st)
                                    config->target_addr_len, &st->src_addr,
                                    &st->src_addr_len)) {
                 die("Failed to determine source IP for target");
-                /* NOT REACHED */
         }
 
         st->sport = 1024 + (getpid() % 64000);
@@ -461,21 +460,17 @@ pscan_run(const pscan_config_t *config)
         st = calloc(1, sizeof(pscan_state_t));
         if (!st)
                 die("Out of memory for pscan state");
-        /* NOT REACHED */
-
         init_pscan_state(config, st);
 
         if (config->udp) {
                 st->sock = net_open_icmp_socket(config->target_addr.ss_family);
                 if (!st->sock || net_is_dgram(st->sock)) {
                         die("UDP scan requires root for raw ICMP socket");
-                        /* NOT REACHED */
                 }
                 st->send_fd =
                     socket(config->target_addr.ss_family, SOCK_DGRAM, 0);
                 if (st->send_fd < 0) {
                         die("Failed to open UDP socket");
-                        /* NOT REACHED */
                 }
         } else {
                 st->sock = net_open_ip_raw_socket(config->target_addr.ss_family,
@@ -483,7 +478,6 @@ pscan_run(const pscan_config_t *config)
                 st->send_fd = -1;
                 if (!st->sock) {
                         die("Failed to open raw TCP socket. Are you root?");
-                        /* NOT REACHED */
                 }
         }
 
@@ -518,8 +512,6 @@ pscan_run(const pscan_config_t *config)
         port_list = malloc(num_ports * sizeof(u_short));
         if (!port_list)
                 die("Out of memory allocating port list");
-        /* NOT REACHED */
-
         for (i = 0; i < num_ports; i++) {
                 port_list[i] = config->start_port + i;
         }

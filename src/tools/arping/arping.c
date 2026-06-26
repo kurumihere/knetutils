@@ -50,10 +50,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#ifndef ETH_ALEN
-#define ETH_ALEN 6
-#endif
-
 #ifndef IPV4_ALEN
 #define IPV4_ALEN 4
 #endif

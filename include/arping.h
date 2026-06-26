@@ -41,10 +41,6 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-#ifndef ETH_ALEN
-#define ETH_ALEN 6
-#endif
-
 typedef struct {
         const char *iface;
         u_int target_ip;

@@ -224,7 +224,6 @@ setup_traceroute_sockets(const traceroute_config_t *config,
 
         if (!st->sock) {
                 die("Failed to open ICMP socket. Are you root?");
-                /* NOT REACHED */
         }
 
         st->udp_sock = -1;
@@ -233,7 +232,6 @@ setup_traceroute_sockets(const traceroute_config_t *config,
                 st->udp_sock = socket(config->family, SOCK_DGRAM, IPPROTO_UDP);
                 if (st->udp_sock < 0) {
                         die("Failed to open UDP socket");
-                        /* NOT REACHED */
                 }
         }
 
@@ -289,7 +287,6 @@ init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
 
         if (!st->packet) {
                 die("Memory allocation failed");
-                /* NOT REACHED */
         }
 }
 

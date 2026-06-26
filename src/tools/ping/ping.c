@@ -371,8 +371,6 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
         st->packet = calloc(1, st->total_len);
         if (!st->packet)
                 die("Memory allocation failed for packet");
-        /* NOT REACHED */
-
         if (config->pattern_len > 0) {
                 u_char *payload = st->packet + st->header_size;
                 size_t i;
@@ -453,7 +451,6 @@ ping_run(const ping_config_t *config)
         sock = net_open_icmp_socket(config->family);
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
-                /* NOT REACHED */
         }
 
         setup_socket_options(config, sock);

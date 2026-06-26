@@ -42,6 +42,14 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#ifndef ETH_ALEN
+#ifdef ETHER_ADDR_LEN
+#define ETH_ALEN ETHER_ADDR_LEN
+#else
+#define ETH_ALEN 6
+#endif
+#endif
+
 #define COLOR_RESET "\x1b[0m"
 #define COLOR_RED "\x1b[31m"
 #define COLOR_GREEN "\x1b[32m"

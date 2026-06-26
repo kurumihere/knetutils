@@ -88,7 +88,6 @@ die(const char *fmt, ...)
         va_end(args);
 
         exit(EXIT_FAILURE);
-        /* NOT REACHED */
 }
 
 u_int64_t
@@ -98,7 +97,6 @@ get_time_ns(void)
 
         if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
                 die("clock_gettime failed");
-                /* NOT REACHED */
         }
 
         return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
