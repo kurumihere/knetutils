@@ -37,6 +37,8 @@
 #ifndef KNETUTILS_ARPING_H
 #define KNETUTILS_ARPING_H
 
+#include "utils.h"
+
 #include <net/ethernet.h>
 #include <stdbool.h>
 #include <sys/types.h>
