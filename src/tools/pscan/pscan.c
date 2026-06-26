@@ -3,10 +3,13 @@
 #include "utils.h"
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,10 +18,14 @@
 
 typedef struct {
         net_socket_t *sock;
+        int send_fd;
         struct sockaddr_storage src_addr;
         socklen_t src_addr_len;
         char target_str[INET6_ADDRSTRLEN];
         uint16_t sport;
+        uint64_t sent_time[65536];
+        bool open_ports[65536];
+        bool closed_ports[65536];
 } pscan_state_t;
 
 struct ipv6_pseudo_header {
@@ -57,8 +64,22 @@ init_pscan_state(const pscan_config_t *config, pscan_state_t *st)
 }
 
 static void
-send_syn_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
+send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
 {
+        if (config->udp) {
+                struct sockaddr_storage dst;
+                memcpy(&dst, &config->target_addr, config->target_addr_len);
+                if (dst.ss_family == AF_INET) {
+                        ((struct sockaddr_in *)&dst)->sin_port = htons(dport);
+                } else {
+                        ((struct sockaddr_in6 *)&dst)->sin6_port = htons(dport);
+                }
+                st->sent_time[dport] = get_time_ns();
+                sendto(st->send_fd, NULL, 0, 0, (struct sockaddr *)&dst,
+                       config->target_addr_len);
+                return;
+        }
+
         struct tcphdr tcph;
         memset(&tcph, 0, sizeof(tcph));
         tcph.th_sport = htons(st->sport);
@@ -116,12 +137,52 @@ send_syn_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
                             (struct sockaddr *)&dst,
                             config->target_addr_len) < 0) {
         }
+        st->sent_time[dport] = get_time_ns();
 }
 
 static void
-process_packet(const pscan_config_t *config, const pscan_state_t *st,
-               uint8_t *buf, ssize_t len, const struct sockaddr_storage *src)
+process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
+               ssize_t len, const struct sockaddr_storage *src)
 {
+        if (config->udp) {
+                if (config->target_addr.ss_family == AF_INET) {
+                        struct ip *iph = (struct ip *)buf;
+                        int hlen = iph->ip_hl << 2;
+                        if (len < hlen + 8)
+                                return;
+                        struct icmp *icmph = (struct icmp *)(buf + hlen);
+                        if (icmph->icmp_type == ICMP_UNREACH &&
+                            icmph->icmp_code == ICMP_UNREACH_PORT) {
+                                struct ip *orig_iph =
+                                    (struct ip *)&icmph->icmp_data;
+                                int orig_iph_len = orig_iph->ip_hl << 2;
+                                if (len < hlen + 8 + orig_iph_len + 8)
+                                        return;
+                                struct udphdr *udph =
+                                    (struct udphdr *)((uint8_t *)orig_iph +
+                                                      orig_iph_len);
+                                uint16_t port = ntohs(udph->uh_dport);
+                                st->closed_ports[port] = true;
+                        }
+                } else {
+                        if (len < 8)
+                                return;
+                        struct icmp6_hdr *icmph = (struct icmp6_hdr *)buf;
+                        if (icmph->icmp6_type == ICMP6_DST_UNREACH &&
+                            icmph->icmp6_code == ICMP6_DST_UNREACH_NOPORT) {
+                                if (len < 8 + 40 + 8)
+                                        return;
+                                struct ip6_hdr *orig_iph =
+                                    (struct ip6_hdr *)(buf + 8);
+                                struct udphdr *udph =
+                                    (struct udphdr *)((uint8_t *)orig_iph + 40);
+                                uint16_t port = ntohs(udph->uh_dport);
+                                st->closed_ports[port] = true;
+                        }
+                }
+                return;
+        }
+
         if (len < (ssize_t)sizeof(struct tcphdr))
                 return;
 
@@ -153,7 +214,22 @@ process_packet(const pscan_config_t *config, const pscan_state_t *st,
                 return;
 
         if ((tcph->th_flags & TH_SYN) && (tcph->th_flags & TH_ACK)) {
-                printf("Port %u is open\n", port);
+                if (!st->open_ports[port]) {
+                        st->open_ports[port] = true;
+                        uint64_t rtt = 0;
+                        if (st->sent_time[port] > 0) {
+                                rtt = time_diff_ns(st->sent_time[port],
+                                                   get_time_ns());
+                        }
+                        char time_buf[64] = "N/A";
+                        if (rtt > 0) {
+                                format_time(rtt, NULL, time_buf,
+                                            sizeof(time_buf));
+                        }
+                        printf(COLOR_BOLD COLOR_GREEN
+                               "Port %u is open" COLOR_RESET " (time=%s)\n",
+                               port, time_buf);
+                }
         }
 }
 
@@ -183,10 +259,23 @@ pscan_run(const pscan_config_t *config)
         pscan_state_t st;
         init_pscan_state(config, &st);
 
-        st.sock =
-            net_open_ip_raw_socket(config->target_addr.ss_family, IPPROTO_TCP);
-        if (!st.sock) {
-                die("Failed to open raw TCP socket. Are you root?");
+        if (config->udp) {
+                st.sock = net_open_icmp_socket(config->target_addr.ss_family);
+                if (!st.sock || net_is_dgram(st.sock)) {
+                        die("UDP scan requires root for raw ICMP socket");
+                }
+                st.send_fd =
+                    socket(config->target_addr.ss_family, SOCK_DGRAM, 0);
+                if (st.send_fd < 0) {
+                        die("Failed to open UDP socket");
+                }
+        } else {
+                st.sock = net_open_ip_raw_socket(config->target_addr.ss_family,
+                                                 IPPROTO_TCP);
+                st.send_fd = -1;
+                if (!st.sock) {
+                        die("Failed to open raw TCP socket. Are you root?");
+                }
         }
 
         if (config->bind_iface) {
@@ -197,17 +286,25 @@ pscan_run(const pscan_config_t *config)
                         die("Failed to bind to interface %s",
                             config->bind_iface);
                 }
+                if (config->udp) {
+                        if (setsockopt(st.send_fd, SOL_SOCKET, SO_BINDTODEVICE,
+                                       config->bind_iface,
+                                       strlen(config->bind_iface)) < 0) {
+                                die("Failed to bind UDP socket to interface %s",
+                                    config->bind_iface);
+                        }
+                }
 #else
                 log_warn("SO_BINDTODEVICE not supported on this platform");
 #endif
         }
 
-        printf("Scanning %s ports %u to %u...\n", st.target_str,
-               config->start_port, config->end_port);
+        log_info("Scanning %s ports %u to %u...", st.target_str,
+                 config->start_port, config->end_port);
 
         for (uint16_t port = config->start_port; port <= config->end_port;
              port++) {
-                send_syn_probe(config, &st, port);
+                send_probe(config, &st, port);
                 drain_packets(config, &st);
                 usleep(100);
         }
@@ -220,6 +317,21 @@ pscan_run(const pscan_config_t *config)
                 }
         }
 
+        if (config->udp) {
+                for (uint16_t port = config->start_port;
+                     port <= config->end_port; port++) {
+                        if (!st.closed_ports[port]) {
+                                printf(COLOR_BOLD COLOR_YELLOW
+                                       "Port %u is open|filtered" COLOR_RESET
+                                       "\n",
+                                       port);
+                        }
+                }
+        }
+
         net_close_raw_socket(st.sock);
+        if (st.send_fd >= 0) {
+                close(st.send_fd);
+        }
         return EXIT_SUCCESS;
 }

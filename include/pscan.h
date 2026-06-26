@@ -13,6 +13,7 @@ typedef struct {
         socklen_t target_addr_len;
         int family;
         const char *bind_iface;
+        bool udp;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);

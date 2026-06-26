@@ -7,18 +7,23 @@
 #include <string.h>
 #include <unistd.h>
 
+static const cli_option_t pscan_options[] = {
+    {'4', NULL, "use IPv4"},
+    {'6', NULL, "use IPv6"},
+    {'p', "ports", "port range to scan (e.g. 1-1024 or 80)"},
+    {'u', NULL, "use UDP scan instead of TCP SYN"},
+    {'W', "timeout", "time to wait for a response, in seconds"},
+    {'I', "iface/ip", "bind to a specific interface or IP address"},
+    {'h', NULL, "print help and exit"},
+    {0, NULL, NULL}};
+
 static void
-print_usage(const char *progname)
+print_usage(const char *prog_name)
 {
-        printf("Usage: %s [options] <destination>\n", progname);
-        printf("Options:\n");
-        printf("  -4              use IPv4\n");
-        printf("  -6              use IPv6\n");
-        printf("  -p <start-end>  port range to scan (e.g. 1-1024 or 80)\n");
-        printf("  -W <timeout>    time to wait for a response, in seconds\n");
-        printf(
-            "  -I <iface/ip>   bind to a specific interface or IP address\n");
-        printf("  -h              print help and exit\n");
+        cli_app_t app = {.prog_name = prog_name,
+                         .usage_args = "[options] <destination>",
+                         .options = pscan_options};
+        cli_print_help(&app);
 }
 
 int
@@ -33,8 +38,11 @@ pscan_cli_main(int argc, char **argv)
         config.end_port = 1024;
 
         int opt;
-        while ((opt = getopt(argc, argv, "46p:W:I:h")) != -1) {
+        while ((opt = getopt(argc, argv, "46p:W:I:uh")) != -1) {
                 switch (opt) {
+                case 'u':
+                        config.udp = true;
+                        break;
                 case '4':
                         config.family = AF_INET;
                         break;
