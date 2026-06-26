@@ -1,3 +1,39 @@
+/***************************************************************************
+ * traceroute.c -- Traceroute utility logic                                *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "traceroute.h"
 #include "net.h"
 #include "utils.h"
@@ -27,22 +63,22 @@ handle_sigint(int sig)
 }
 
 typedef struct {
-        uint16_t pid;
-        uint16_t seq;
+        u_short pid;
+        u_short seq;
         bool target_reached;
 
         net_socket_t *sock;
         int udp_sock;
 
-        uint8_t *packet;
+        u_char *packet;
         size_t header_size;
 
         struct sockaddr_storage last_hop_addr;
 } traceroute_state_t;
 
 static bool
-is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
-                uint16_t expected_seq, bool use_udp, uint16_t expected_port)
+is_our_probe_v4(const u_char *buf, ssize_t len, u_short expected_id,
+                u_short expected_seq, bool use_udp, u_short expected_port)
 {
         struct ip *ip_hdr;
         int hlen;
@@ -79,14 +115,14 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                         if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
                                 return false;
                         inner_udp =
-                            (struct udphdr *)((uint8_t *)inner_ip + inner_hlen);
+                            (struct udphdr *)((u_char *)inner_ip + inner_hlen);
                         return ntohs(inner_udp->uh_dport) == expected_port;
                 } else {
                         struct icmp *inner_icp;
                         if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
                                 return false;
                         inner_icp =
-                            (struct icmp *)((uint8_t *)inner_ip + inner_hlen);
+                            (struct icmp *)((u_char *)inner_ip + inner_hlen);
                         return inner_icp->icmp_id == expected_id &&
                                inner_icp->icmp_seq == expected_seq;
                 }
@@ -96,8 +132,8 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 }
 
 static bool
-is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
-                uint16_t expected_seq, bool use_udp, uint16_t expected_port)
+is_our_probe_v6(const u_char *buf, ssize_t len, u_short expected_id,
+                u_short expected_seq, bool use_udp, u_short expected_port)
 {
         struct icmp6_hdr *icp;
 
@@ -123,12 +159,12 @@ is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 
                 if (use_udp) {
                         struct udphdr *inner_udp =
-                            (struct udphdr *)((uint8_t *)inner_ip +
+                            (struct udphdr *)((u_char *)inner_ip +
                                               sizeof(struct ip6_hdr));
                         return ntohs(inner_udp->uh_dport) == expected_port;
                 } else {
                         struct icmp6_hdr *inner_icp =
-                            (struct icmp6_hdr *)((uint8_t *)inner_ip +
+                            (struct icmp6_hdr *)((u_char *)inner_ip +
                                                  sizeof(struct ip6_hdr));
 
                         return inner_icp->icmp6_id == expected_id &&
@@ -205,9 +241,14 @@ init_traceroute_state(const traceroute_config_t *config, traceroute_state_t *st)
                 die("Memory allocation failed");
 }
 
+/*
+ *		S E N D _ T R A C E R O U T E _ P R O B E
+ *
+ * Dispatch an ICMP Echo Request or UDP datagram with a specific TTL.
+ */
 static bool
 send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
-                      uint8_t ttl, uint16_t dest_port)
+                      u_char ttl, u_short dest_port)
 {
         int level;
         int optname;
@@ -271,7 +312,7 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
 }
 
 static bool
-check_is_target(const traceroute_config_t *config, const uint8_t *recv_buf,
+check_is_target(const traceroute_config_t *config, const u_char *recv_buf,
                 ssize_t n)
 {
         if (config->family == AF_INET) {
@@ -323,10 +364,15 @@ print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
         }
 }
 
+/*
+ *		R E C V _ T R A C E R O U T E _ R E P L Y
+ *
+ * Await ICMP Time Exceeded or Echo Reply messages from routers.
+ */
 static bool
 recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
-                      uint64_t wait_until, uint64_t send_time,
-                      uint16_t dest_port)
+                      u_int64_t wait_until, u_int64_t send_time,
+                      u_short dest_port)
 {
         struct pollfd pfd;
 
@@ -337,13 +383,13 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                 int64_t timeout_ns;
                 int timeout_ms;
                 int ret;
-                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                __attribute__((aligned(8))) u_char recv_buf[4096];
                 struct sockaddr_storage src_addr;
                 socklen_t src_addr_len = sizeof(src_addr);
                 ssize_t n;
                 bool is_mine = false;
-                uint64_t recv_time;
-                uint64_t rtt;
+                u_int64_t recv_time;
+                u_int64_t rtt;
                 char time_buf[64];
 
                 timeout_ns = wait_until - get_time_ns();
@@ -373,6 +419,7 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                 if (!is_mine)
                         continue;
 
+                /* Calculate the round-trip time for this hop.  */
                 recv_time = get_time_ns();
                 rtt = time_diff_ns(send_time, recv_time);
 
@@ -398,8 +445,8 @@ traceroute_run(const traceroute_config_t *config)
         struct sigaction sa;
         traceroute_state_t st;
         char target_str[INET6_ADDRSTRLEN];
-        uint8_t ttl;
-        uint8_t probe;
+        u_char ttl;
+        u_char probe;
 
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
@@ -426,9 +473,9 @@ traceroute_run(const traceroute_config_t *config)
         for (ttl = config->first_ttl;
              ttl <= config->max_ttl && keep_running && !st.target_reached;
              ttl++) {
-                uint16_t dest_port;
-                uint64_t send_time;
-                uint64_t wait_until;
+                u_short dest_port;
+                u_int64_t send_time;
+                u_int64_t wait_until;
                 bool got_reply;
 
                 printf("%2u  ", ttl);

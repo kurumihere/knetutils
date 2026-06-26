@@ -1,14 +1,55 @@
+/***************************************************************************
+ * main.c -- Core knetutils CLI entry point                                *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int arping_cli_main(int argc, char *argv[]);
-int ping_cli_main(int argc, char *argv[]);
-int sniff_cli_main(int argc, char *argv[]);
-int tcping_cli_main(int argc, char *argv[]);
-int traceroute_cli_main(int argc, char *argv[]);
-int pscan_cli_main(int argc, char *argv[]);
+int arping_cli_main(int c, char **av);
+int ping_cli_main(int c, char **av);
+int sniff_cli_main(int c, char **av);
+int tcping_cli_main(int c, char **av);
+int traceroute_cli_main(int c, char **av);
+int pscan_cli_main(int c, char **av);
 
+/*
+ *		G E T _ B A S E N A M E
+ *
+ * Extract the file name from a given path.
+ */
 static const char *
 get_basename(const char *path)
 {
@@ -16,6 +57,11 @@ get_basename(const char *path)
         return base ? base + 1 : path;
 }
 
+/*
+ *		P R I N T _ M A I N _ U S A G E
+ *
+ * Display the main help menu for the suite.
+ */
 static void
 print_main_usage(void)
 {
@@ -42,49 +88,54 @@ print_main_usage(void)
                         "a command.\n");
 }
 
+/*
+ *		M A I N
+ *
+ * The main multiplexer entry point for all tools.
+ */
 int
-main(int argc, char *argv[])
+main(int c, char **av)
 {
         const char *prog_name;
         const char *cmd;
 
-        if (argc < 1)
+        if (c < 1)
                 return EXIT_FAILURE;
 
-        prog_name = get_basename(argv[0]);
+        prog_name = get_basename(*av);
 
         if (strcmp(prog_name, "arping") == 0) {
-                return arping_cli_main(argc, argv);
+                return arping_cli_main(c, av);
         } else if (strcmp(prog_name, "ping") == 0) {
-                return ping_cli_main(argc, argv);
+                return ping_cli_main(c, av);
         } else if (strcmp(prog_name, "sniff") == 0) {
-                return sniff_cli_main(argc, argv);
+                return sniff_cli_main(c, av);
         } else if (strcmp(prog_name, "tcping") == 0) {
-                return tcping_cli_main(argc, argv);
+                return tcping_cli_main(c, av);
         } else if (strcmp(prog_name, "traceroute") == 0) {
-                return traceroute_cli_main(argc, argv);
+                return traceroute_cli_main(c, av);
         } else if (strcmp(prog_name, "pscan") == 0) {
-                return pscan_cli_main(argc, argv);
+                return pscan_cli_main(c, av);
         }
 
-        if (argc < 2) {
+        if (c < 2) {
                 print_main_usage();
                 return EXIT_FAILURE;
         }
 
-        cmd = argv[1];
+        cmd = *(av + 1);
         if (strcmp(cmd, "arping") == 0) {
-                return arping_cli_main(argc - 1, argv + 1);
+                return arping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "ping") == 0) {
-                return ping_cli_main(argc - 1, argv + 1);
+                return ping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "sniff") == 0) {
-                return sniff_cli_main(argc - 1, argv + 1);
+                return sniff_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "tcping") == 0) {
-                return tcping_cli_main(argc - 1, argv + 1);
+                return tcping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "traceroute") == 0) {
-                return traceroute_cli_main(argc - 1, argv + 1);
+                return traceroute_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "pscan") == 0) {
-                return pscan_cli_main(argc - 1, argv + 1);
+                return pscan_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
                 print_main_usage();
                 return EXIT_SUCCESS;

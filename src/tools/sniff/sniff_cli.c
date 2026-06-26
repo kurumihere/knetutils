@@ -1,3 +1,39 @@
+/***************************************************************************
+ * sniff_cli.c -- CLI wrapper for the sniff utility                        *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "sniff.h"
 #include "utils.h"
 
@@ -29,16 +65,21 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
+/*
+ *		S N I F F _ C L I _ M A I N
+ *
+ * Parse arguments and execute the sniff tool.
+ */
 int
-sniff_cli_main(int argc, char *argv[])
+sniff_cli_main(int c, char **av)
 {
         sniff_config_t config;
-        int opt;
+        int ch;
 
         memset(&config, 0, sizeof(config));
 
-        while ((opt = getopt(argc, argv, "I:c:w:vh")) != -1) {
-                switch (opt) {
+        while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
+                switch (ch) {
                 case 'I':
                         config.iface = optarg;
                         break;
@@ -52,17 +93,17 @@ sniff_cli_main(int argc, char *argv[])
                         config.verbosity++;
                         break;
                 case 'h':
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_SUCCESS;
                 default:
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_FAILURE;
                 }
         }
 
         if (!config.iface) {
                 log_err("Interface is required (-I)");
-                print_usage(argv[0]);
+                print_usage(*av);
                 return EXIT_FAILURE;
         }
 

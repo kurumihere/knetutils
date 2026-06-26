@@ -1,3 +1,39 @@
+/***************************************************************************
+ * arping.c -- ARP ping utility logic                                      *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "arping.h"
 #include "net.h"
 #include "utils.h"
@@ -32,20 +68,20 @@ handle_sigint(int sig)
 }
 
 static void
-print_mac(const uint8_t *mac)
+print_mac(const u_char *mac)
 {
         printf("%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3],
                mac[4], mac[5]);
 }
 
 typedef struct {
-        uint32_t sent;
-        uint32_t received;
+        u_int sent;
+        u_int received;
         net_socket_t *sock;
 
-        uint8_t current_target_mac[6];
-        uint8_t target_mac_broadcast[6];
-        uint8_t target_mac_zero[6];
+        u_char current_target_mac[6];
+        u_char target_mac_broadcast[6];
+        u_char target_mac_zero[6];
 
         struct in_addr target_in;
         struct in_addr source_in;
@@ -73,8 +109,8 @@ setup_arping_socket(const arping_config_t *config, arping_state_t *st)
 static void
 init_arping_state(const arping_config_t *config, arping_state_t *st)
 {
-        uint8_t bc[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-        uint8_t zero[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        u_char bc[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+        u_char zero[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
         memset(st, 0, sizeof(*st));
 
@@ -86,10 +122,15 @@ init_arping_state(const arping_config_t *config, arping_state_t *st)
         memcpy(st->current_target_mac, bc, 6);
 }
 
+/*
+ *		S E N D _ A R P I N G _ P R O B E
+ *
+ * Transmit an ARP request or reply to the network.
+ */
 static bool
 send_arping_probe(const arping_config_t *config, arping_state_t *st)
 {
-        uint8_t buffer[sizeof(struct ether_header) + sizeof(struct ether_arp)];
+        u_char buffer[sizeof(struct ether_header) + sizeof(struct ether_arp)];
         struct ether_header *eth = (struct ether_header *)buffer;
         struct ether_arp *arp =
             (struct ether_arp *)(buffer + sizeof(struct ether_header));
@@ -128,9 +169,9 @@ send_arping_probe(const arping_config_t *config, arping_state_t *st)
 
 static bool
 handle_arp_reply(const arping_config_t *config, arping_state_t *st,
-                 struct ether_arp *r_arp, uint64_t rtt)
+                 struct ether_arp *r_arp, u_int64_t rtt)
 {
-        uint32_t reply_spa;
+        u_int reply_spa;
         memcpy(&reply_spa, r_arp->arp_spa, 4);
 
         if (reply_spa != config->target_ip) {
@@ -160,9 +201,14 @@ handle_arp_reply(const arping_config_t *config, arping_state_t *st,
         return true;
 }
 
+/*
+ *		R E C V _ A R P I N G _ R E P L Y
+ *
+ * Listen for incoming ARP replies and process them.
+ */
 static bool
 recv_arping_reply(const arping_config_t *config, arping_state_t *st,
-                  uint64_t expire, uint64_t send_time)
+                  u_int64_t expire, u_int64_t send_time)
 {
         struct pollfd pfd;
         pfd.fd = net_get_fd(st->sock);
@@ -172,12 +218,12 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                 int64_t timeout_ns;
                 int timeout_ms;
                 int ret;
-                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                __attribute__((aligned(8))) u_char recv_buf[4096];
                 ssize_t n;
                 struct ether_header *r_eth;
                 struct ether_arp *r_arp;
-                uint64_t recv_time;
-                uint64_t rtt;
+                u_int64_t recv_time;
+                u_int64_t rtt;
 
                 timeout_ns = expire - get_time_ns();
                 if (timeout_ns <= 0)
@@ -201,6 +247,7 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                         continue;
                 }
 
+                /* Verify that the packet is indeed an ARP frame.  */
                 r_eth = (struct ether_header *)recv_buf;
                 if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
                         continue;
@@ -296,8 +343,8 @@ arping_run(const arping_config_t *config)
 
         while (keep_running &&
                (config->count == 0 || st.sent < config->count)) {
-                uint64_t send_time;
-                uint64_t expire;
+                u_int64_t send_time;
+                u_int64_t expire;
                 bool got_reply;
 
                 send_time = get_time_ns();
@@ -324,8 +371,8 @@ arping_run(const arping_config_t *config)
 
                 if (keep_running &&
                     (config->count == 0 || st.sent < config->count)) {
-                        uint64_t current = get_time_ns();
-                        uint64_t next_send = send_time + config->interval_ns;
+                        u_int64_t current = get_time_ns();
+                        u_int64_t next_send = send_time + config->interval_ns;
                         if (current < next_send) {
                                 usleep((next_send - current) / 1000);
                         }

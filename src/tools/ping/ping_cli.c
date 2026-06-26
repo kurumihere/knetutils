@@ -1,3 +1,39 @@
+/***************************************************************************
+ * ping_cli.c -- CLI wrapper for the ping utility                          *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "net.h"
 #include "ping.h"
 #include "utils.h"
@@ -38,11 +74,16 @@ print_usage(const char *prog_name)
         cli_print_help(&app);
 }
 
+/*
+ *		P I N G _ C L I _ M A I N
+ *
+ * Parse arguments and execute the ping tool.
+ */
 int
-ping_cli_main(int argc, char *argv[])
+ping_cli_main(int c, char **av)
 {
         ping_config_t config;
-        int opt;
+        int ch;
         const char *target_ip_str;
 
         memset(&config, 0, sizeof(config));
@@ -55,9 +96,8 @@ ping_cli_main(int argc, char *argv[])
 
         config.family = AF_UNSPEC;
 
-        while ((opt = getopt(argc, argv, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) !=
-               -1) {
-                switch (opt) {
+        while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
+                switch (ch) {
                 case '4':
                         config.family = AF_INET;
                         break;
@@ -81,22 +121,23 @@ ping_cli_main(int argc, char *argv[])
                         config.bind_iface = optarg;
                         break;
                 case 'c':
-                        config.count = (uint32_t)atoi(optarg);
+                        config.count = (u_int)atoi(optarg);
                         break;
                 case 'w':
-                        config.deadline_ns = (uint64_t)atoi(optarg) * NS_PER_S;
+                        config.deadline_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'W':
-                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_S;
+                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'i':
-                        config.interval_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
+                        config.interval_ns =
+                            (u_int64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'u':
                         config.time_unit = optarg;
                         break;
                 case 's':
-                        config.payload_size = (uint32_t)atoi(optarg);
+                        config.payload_size = (u_int)atoi(optarg);
                         break;
                 case 'p': {
                         size_t len = strlen(optarg);
@@ -107,7 +148,7 @@ ping_cli_main(int argc, char *argv[])
                         for (i = 0; i < config.pattern_len; i++) {
                                 unsigned int byte;
                                 sscanf(optarg + i * 2, "%2x", &byte);
-                                config.pattern[i] = (uint8_t)byte;
+                                config.pattern[i] = (u_char)byte;
                         }
                         break;
                 }
@@ -116,27 +157,29 @@ ping_cli_main(int argc, char *argv[])
                         config.has_tos = true;
                         break;
                 case 't':
-                        config.ttl = (uint8_t)atoi(optarg);
+                        config.ttl = (u_char)atoi(optarg);
                         break;
                 case 'q':
                         config.quiet = true;
                         break;
                 case 'h':
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_SUCCESS;
                 default:
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_FAILURE;
                 }
         }
 
-        if (optind >= argc) {
-                log_err("Missing destination IP address");
-                print_usage(argv[0]);
+        c -= optind;
+        av += optind;
+
+        if (c < 1) {
+                log_err("Target IP/hostname is required");
                 return EXIT_FAILURE;
         }
 
-        target_ip_str = argv[optind];
+        target_ip_str = *av;
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);

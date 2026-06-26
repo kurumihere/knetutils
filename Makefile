@@ -2,7 +2,7 @@ CC ?= cc
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 
-WARNING_FLAGS = -Wall -Wextra -pedantic -Werror
+WARNING_FLAGS = -Wall -Wextra -pedantic -Werror -Wdeclaration-after-statement
 STANDARD_FLAGS = -std=c11 -D_GNU_SOURCE
 INCLUDES = -I./include
 

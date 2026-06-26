@@ -1,3 +1,39 @@
+/***************************************************************************
+ * arping_cli.c -- CLI wrapper for the arping utility                      *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "arping.h"
 #include "net.h"
 #include "utils.h"
@@ -37,12 +73,17 @@ print_usage(const char *prog_name)
                          .options = arping_options};
         cli_print_help(&app);
 }
+/*
+ *		A R P I N G _ C L I _ M A I N
+ *
+ * Parse arguments and execute the arping tool.
+ */
 int
-arping_cli_main(int argc, char *argv[])
+arping_cli_main(int c, char **av)
 {
         arping_config_t config;
         const char *source_ip_str = NULL;
-        int opt;
+        int ch;
         const char *target_ip_str;
 
         memset(&config, 0, sizeof(config));
@@ -51,19 +92,20 @@ arping_cli_main(int argc, char *argv[])
         config.timeout_ns = NS_PER_S;
         config.interval_ns = NS_PER_S;
 
-        while ((opt = getopt(argc, argv, "I:c:w:i:S:qUdGCfAbu:h")) != -1) {
-                switch (opt) {
+        while ((ch = getopt(c, av, "I:c:w:i:S:qUdGCfAbu:h")) != -1) {
+                switch (ch) {
                 case 'I':
                         config.iface = optarg;
                         break;
                 case 'c':
-                        config.count = (uint32_t)atoi(optarg);
+                        config.count = (u_int)atoi(optarg);
                         break;
                 case 'w':
-                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
+                        config.timeout_ns = (u_int64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'i':
-                        config.interval_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
+                        config.interval_ns =
+                            (u_int64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'S':
                         source_ip_str = optarg;
@@ -96,17 +138,25 @@ arping_cli_main(int argc, char *argv[])
                         config.time_unit = optarg;
                         break;
                 case 'h':
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_SUCCESS;
                 default:
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_FAILURE;
                 }
         }
 
         if (!config.iface) {
                 log_err("Network interface is required (-I option)");
-                print_usage(argv[0]);
+                print_usage(*av);
+                return EXIT_FAILURE;
+        }
+
+        c -= optind;
+        av += optind;
+
+        if (c < 1 && !config.gateway && !config.unsolicited) {
+                log_err("Target IP/hostname is required");
                 return EXIT_FAILURE;
         }
 
@@ -138,12 +188,12 @@ arping_cli_main(int argc, char *argv[])
         } else if (config.unsolicited) {
                 config.target_ip = config.source_ip;
         } else {
-                if (optind >= argc) {
+                if (c < 1) {
                         log_err("Missing destination IP address");
-                        print_usage(argv[0]);
+                        print_usage(*av);
                         return EXIT_FAILURE;
                 }
-                target_ip_str = argv[optind];
+                target_ip_str = *av;
                 if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
                         die("Invalid target IP address or hostname: %s",
                             target_ip_str);

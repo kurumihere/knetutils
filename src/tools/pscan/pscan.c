@@ -1,3 +1,39 @@
+/***************************************************************************
+ * pscan.c -- Port scanner utility logic                                   *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "pscan.h"
 #include "net.h"
 #include "utils.h"
@@ -22,9 +58,9 @@ typedef struct {
         struct sockaddr_storage src_addr;
         socklen_t src_addr_len;
         char target_str[INET6_ADDRSTRLEN];
-        uint16_t sport;
-        uint64_t sent_time[65536];
-        uint64_t open_rtt[65536];
+        u_short sport;
+        u_int64_t sent_time[65536];
+        u_int64_t open_rtt[65536];
         char banners[65536][128];
         char os_guesses[65536][32];
         bool open_ports[65536];
@@ -32,7 +68,7 @@ typedef struct {
 } pscan_state_t;
 
 static const char *
-guess_os_from_ttl(uint8_t ttl, uint16_t win)
+guess_os_from_ttl(u_char ttl, u_short win)
 {
         if (ttl == 0)
                 return "Unknown";
@@ -67,17 +103,17 @@ guess_os_from_ttl(uint8_t ttl, uint16_t win)
 struct ipv6_pseudo_header {
         struct in6_addr src_addr;
         struct in6_addr dst_addr;
-        uint32_t tcp_length;
-        uint8_t zero[3];
-        uint8_t next_header;
+        u_int tcp_length;
+        u_char zero[3];
+        u_char next_header;
 } __attribute__((packed));
 
 struct ipv4_pseudo_header {
-        uint32_t src_addr;
-        uint32_t dst_addr;
-        uint8_t zero;
-        uint8_t protocol;
-        uint16_t tcp_length;
+        u_int src_addr;
+        u_int dst_addr;
+        u_char zero;
+        u_char protocol;
+        u_short tcp_length;
 } __attribute__((packed));
 
 static void
@@ -98,7 +134,7 @@ init_pscan_state(const pscan_config_t *config, pscan_state_t *st)
 }
 
 static void
-grab_banner(const pscan_config_t *config, uint16_t port, char *banner_buf,
+grab_banner(const pscan_config_t *config, u_short port, char *banner_buf,
             size_t banner_len)
 {
         int fd;
@@ -149,10 +185,16 @@ grab_banner(const pscan_config_t *config, uint16_t port, char *banner_buf,
 }
 
 static void
-send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
+send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
 {
+        struct sockaddr_storage dst;
+        struct tcphdr tcph;
+        u_char csum_buf[1024];
+        int csum_len;
+
+        csum_len = 0;
+
         if (config->udp) {
-                struct sockaddr_storage dst;
                 memcpy(&dst, &config->target_addr, config->target_addr_len);
                 if (dst.ss_family == AF_INET) {
                         ((struct sockaddr_in *)&dst)->sin_port = htons(dport);
@@ -165,7 +207,6 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
                 return;
         }
 
-        struct tcphdr tcph;
         memset(&tcph, 0, sizeof(tcph));
         tcph.th_sport = htons(st->sport);
         tcph.th_dport = htons(dport);
@@ -175,9 +216,6 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
         tcph.th_flags = TH_SYN;
         tcph.th_win = htons(64240);
         tcph.th_sum = 0;
-
-        uint8_t csum_buf[1024];
-        int csum_len = 0;
 
         if (config->target_addr.ss_family == AF_INET) {
                 struct ipv4_pseudo_header psh;
@@ -210,7 +248,6 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
 
         tcph.th_sum = net_checksum(csum_buf, csum_len);
 
-        struct sockaddr_storage dst;
         memcpy(&dst, &config->target_addr, config->target_addr_len);
         if (dst.ss_family == AF_INET) {
                 ((struct sockaddr_in *)&dst)->sin_port = htons(dport);
@@ -226,42 +263,60 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, uint16_t dport)
 }
 
 static void
-process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
+process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                ssize_t len, const struct sockaddr_storage *src)
 {
+        char src_str[INET6_ADDRSTRLEN];
+        struct tcphdr *tcph;
+        u_char ttl;
+        u_short port;
+        u_int64_t rtt;
+        char time_buf[64];
+        const char *os_guess;
+
         if (config->udp) {
                 if (config->target_addr.ss_family == AF_INET) {
-                        struct ip *iph = (struct ip *)buf;
-                        int hlen = iph->ip_hl << 2;
+                        struct ip *iph;
+                        int hlen;
+                        struct icmp *icmph;
+                        struct ip *orig_iph;
+                        int orig_iph_len;
+                        struct udphdr *udph;
+                        u_short port;
+
+                        iph = (struct ip *)buf;
+                        hlen = iph->ip_hl << 2;
                         if (len < hlen + 8)
                                 return;
-                        struct icmp *icmph = (struct icmp *)(buf + hlen);
+                        icmph = (struct icmp *)(buf + hlen);
                         if (icmph->icmp_type == ICMP_UNREACH &&
                             icmph->icmp_code == ICMP_UNREACH_PORT) {
-                                struct ip *orig_iph =
-                                    (struct ip *)&icmph->icmp_data;
-                                int orig_iph_len = orig_iph->ip_hl << 2;
+                                orig_iph = (struct ip *)&icmph->icmp_data;
+                                orig_iph_len = orig_iph->ip_hl << 2;
                                 if (len < hlen + 8 + orig_iph_len + 8)
                                         return;
-                                struct udphdr *udph =
-                                    (struct udphdr *)((uint8_t *)orig_iph +
-                                                      orig_iph_len);
-                                uint16_t port = ntohs(udph->uh_dport);
+                                udph = (struct udphdr *)((u_char *)orig_iph +
+                                                         orig_iph_len);
+                                port = ntohs(udph->uh_dport);
                                 st->closed_ports[port] = true;
                         }
                 } else {
+                        struct icmp6_hdr *icmph;
+                        struct ip6_hdr *orig_iph;
+                        struct udphdr *udph;
+                        u_short port;
+
                         if (len < 8)
                                 return;
-                        struct icmp6_hdr *icmph = (struct icmp6_hdr *)buf;
+                        icmph = (struct icmp6_hdr *)buf;
                         if (icmph->icmp6_type == ICMP6_DST_UNREACH &&
                             icmph->icmp6_code == ICMP6_DST_UNREACH_NOPORT) {
                                 if (len < 8 + 40 + 8)
                                         return;
-                                struct ip6_hdr *orig_iph =
-                                    (struct ip6_hdr *)(buf + 8);
-                                struct udphdr *udph =
-                                    (struct udphdr *)((uint8_t *)orig_iph + 40);
-                                uint16_t port = ntohs(udph->uh_dport);
+                                orig_iph = (struct ip6_hdr *)(buf + 8);
+                                udph =
+                                    (struct udphdr *)((u_char *)orig_iph + 40);
+                                port = ntohs(udph->uh_dport);
                                 st->closed_ports[port] = true;
                         }
                 }
@@ -271,7 +326,6 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
         if (len < (ssize_t)sizeof(struct tcphdr))
                 return;
 
-        char src_str[INET6_ADDRSTRLEN];
         getnameinfo((struct sockaddr *)src,
                     src->ss_family == AF_INET ? sizeof(struct sockaddr_in)
                                               : sizeof(struct sockaddr_in6),
@@ -280,17 +334,13 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
         if (strcmp(src_str, st->target_str) != 0)
                 return;
 
-        struct tcphdr *tcph;
-        uint8_t ttl;
-        uint16_t port;
-        uint64_t rtt;
-        char time_buf[64];
-        const char *os_guess;
-
         ttl = 0;
         if (src->ss_family == AF_INET) {
-                struct ip *iph = (struct ip *)buf;
-                int ip_hlen = iph->ip_hl << 2;
+                struct ip *iph;
+                int ip_hlen;
+
+                iph = (struct ip *)buf;
+                ip_hlen = iph->ip_hl << 2;
                 if (len < ip_hlen + (ssize_t)sizeof(struct tcphdr))
                         return;
                 tcph = (struct tcphdr *)(buf + ip_hlen);
@@ -362,16 +412,21 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, uint8_t *buf,
 static void
 drain_packets(const pscan_config_t *config, pscan_state_t *st)
 {
-        uint8_t buf[2048];
+        u_char buf[2048];
         struct sockaddr_storage src;
         socklen_t src_len;
         while (true) {
-                struct pollfd pfd = {net_get_fd(st->sock), POLLIN, 0};
+                struct pollfd pfd;
+                ssize_t len;
+                pfd.fd = net_get_fd(st->sock);
+                pfd.events = POLLIN;
+                pfd.revents = 0;
+
                 if (poll(&pfd, 1, 0) <= 0)
                         break;
 
                 src_len = sizeof(src);
-                ssize_t len =
+                len =
                     net_recv_ip_raw(st->sock, buf, sizeof(buf), &src, &src_len);
                 if (len < 0)
                         break;
@@ -383,14 +438,14 @@ int
 pscan_run(const pscan_config_t *config)
 {
         pscan_state_t *st;
-        uint64_t last_time;
+        u_int64_t last_time;
         double tokens = 1.0;
         double burst = 10.0;
-        uint16_t port;
-        uint64_t start_wait;
-        uint32_t num_ports;
-        uint16_t *port_list;
-        uint32_t i;
+        u_short port;
+        u_int64_t start_wait;
+        u_int num_ports;
+        u_short *port_list;
+        u_int i;
 
         st = calloc(1, sizeof(pscan_state_t));
         if (!st)
@@ -445,7 +500,7 @@ pscan_run(const pscan_config_t *config)
         }
 
         num_ports = config->end_port - config->start_port + 1;
-        port_list = malloc(num_ports * sizeof(uint16_t));
+        port_list = malloc(num_ports * sizeof(u_short));
         if (!port_list)
                 die("Out of memory allocating port list");
 
@@ -456,8 +511,8 @@ pscan_run(const pscan_config_t *config)
         if (config->randomize) {
                 srand((unsigned int)get_time_ns());
                 for (i = num_ports - 1; i > 0; i--) {
-                        uint32_t j = rand() % (i + 1);
-                        uint16_t temp = port_list[i];
+                        u_int j = rand() % (i + 1);
+                        u_short temp = port_list[i];
                         port_list[i] = port_list[j];
                         port_list[j] = temp;
                 }
@@ -469,8 +524,8 @@ pscan_run(const pscan_config_t *config)
                 port = port_list[i];
                 if (config->rate_limit > 0) {
                         while (tokens < 1.0) {
-                                uint64_t now = get_time_ns();
-                                uint64_t delta_ns = now - last_time;
+                                u_int64_t now = get_time_ns();
+                                u_int64_t delta_ns = now - last_time;
                                 last_time = now;
 
                                 tokens += (double)delta_ns *

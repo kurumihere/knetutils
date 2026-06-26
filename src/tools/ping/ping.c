@@ -1,3 +1,39 @@
+/***************************************************************************
+ * ping.c -- ICMP ping utility logic                                       *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "ping.h"
 #include "net.h"
 #include "utils.h"
@@ -26,18 +62,18 @@ handle_sigint(int sig)
 }
 
 typedef struct {
-        uint16_t pid;
-        uint16_t seq;
-        uint32_t sent;
-        uint32_t received;
-        uint64_t start_time;
+        u_short pid;
+        u_short seq;
+        u_int sent;
+        u_int received;
+        u_int64_t start_time;
 
-        uint64_t rtt_min;
-        uint64_t rtt_max;
-        uint64_t rtt_sum;
-        uint64_t rtt_sum_us;
-        uint64_t rtt_sum_squares_us;
-        uint64_t rtt_last;
+        u_int64_t rtt_min;
+        u_int64_t rtt_max;
+        u_int64_t rtt_sum;
+        u_int64_t rtt_sum_us;
+        u_int64_t rtt_sum_squares_us;
+        u_int64_t rtt_last;
 
         int icmp_req_type;
         int icmp_rep_type;
@@ -45,18 +81,18 @@ typedef struct {
         net_socket_t *sock;
         bool is_dgram;
 
-        uint8_t *packet;
+        u_char *packet;
         size_t header_size;
-        uint32_t total_len;
+        u_int total_len;
 
         char target_str[INET6_ADDRSTRLEN];
 } ping_state_t;
 
-static uint64_t
-integer_sqrt(uint64_t n)
+static u_int64_t
+integer_sqrt(u_int64_t n)
 {
-        uint64_t root = 0;
-        uint64_t bit = 1ULL << 62;
+        u_int64_t root = 0;
+        u_int64_t bit = 1ULL << 62;
 
         while (bit > n)
                 bit >>= 2;
@@ -74,9 +110,9 @@ integer_sqrt(uint64_t n)
 }
 
 static void
-update_ping_stats(ping_state_t *st, uint64_t rtt)
+update_ping_stats(ping_state_t *st, u_int64_t rtt)
 {
-        uint64_t rtt_us;
+        u_int64_t rtt_us;
 
         if (st->rtt_min == 0 || rtt < st->rtt_min)
                 st->rtt_min = rtt;
@@ -90,8 +126,8 @@ update_ping_stats(ping_state_t *st, uint64_t rtt)
 }
 
 static void
-print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
-                 const char *src_str, uint16_t r_seq, int ttl)
+print_ping_reply(const ping_config_t *config, u_int64_t rtt, ssize_t n,
+                 int hlen, const char *src_str, u_short r_seq, int ttl)
 {
         char time_buf[64] = "N/A";
 
@@ -116,33 +152,42 @@ print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
         }
 }
 
+/*
+ *		S E N D _ P I N G _ R E Q U E S T
+ *
+ * Construct and transmit an ICMP Echo Request packet.
+ * For IPv4, the packet ID and Sequence are packed into the ICMP header, and the
+ * payload optionally contains a high-resolution 64-bit timestamp. A software
+ * checksum is computed. For IPv6, the ICMPv6 header is used and the kernel
+ * computes the checksum automatically.
+ */
 static void
 send_ping_request(const ping_config_t *config, ping_state_t *st)
 {
         if (config->family == AF_INET) {
                 struct icmp *icp = (struct icmp *)st->packet;
-                uint64_t *ts;
+                u_int64_t *ts;
 
                 icp->icmp_type = st->icmp_req_type;
                 icp->icmp_code = 0;
                 icp->icmp_id = htons(st->pid);
                 icp->icmp_seq = htons(st->seq);
                 if (config->payload_size >= 8) {
-                        ts = (uint64_t *)(st->packet + st->header_size);
+                        ts = (u_int64_t *)(st->packet + st->header_size);
                         *ts = get_time_ns();
                 }
                 icp->icmp_cksum = 0;
                 icp->icmp_cksum = net_checksum(st->packet, st->total_len);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
-                uint64_t *ts;
+                u_int64_t *ts;
 
                 icp->icmp6_type = st->icmp_req_type;
                 icp->icmp6_code = 0;
                 icp->icmp6_id = htons(st->pid);
                 icp->icmp6_seq = htons(st->seq);
                 if (config->payload_size >= 8) {
-                        ts = (uint64_t *)(st->packet + st->header_size);
+                        ts = (u_int64_t *)(st->packet + st->header_size);
                         *ts = get_time_ns();
                 }
                 icp->icmp6_cksum = 0;
@@ -161,9 +206,18 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
         st->sent++;
 }
 
+/*
+ *		R E C V _ P I N G _ R E P L Y
+ *
+ * Listen for and process incoming ICMP Echo Reply packets.
+ * Uses poll() with a calculated timeout to wait for incoming data. Upon
+ * receiving a packet, we inspect the IP header (for IPv4) to locate the inner
+ * ICMP message, verify the ICMP Type, ID, and Sequence numbers, and calculate
+ * the Round Trip Time (RTT).
+ */
 static bool
 recv_ping_reply(const ping_config_t *config, ping_state_t *st,
-                uint64_t wait_until, uint64_t send_time)
+                u_int64_t wait_until, u_int64_t send_time)
 {
         struct pollfd pfd;
         pfd.fd = net_get_fd(st->sock);
@@ -173,16 +227,16 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 int64_t timeout_ns;
                 int timeout_ms;
                 int ret;
-                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                __attribute__((aligned(8))) u_char recv_buf[4096];
                 struct sockaddr_storage src_addr;
                 socklen_t src_addr_len = sizeof(src_addr);
                 ssize_t n;
                 int hlen = 0;
                 int ttl = -1;
-                uint16_t r_id, r_seq;
+                u_short r_id, r_seq;
                 int r_type;
-                uint64_t recv_time;
-                uint64_t rtt = 0;
+                u_int64_t recv_time;
+                u_int64_t rtt = 0;
                 char src_str[INET6_ADDRSTRLEN];
 
                 timeout_ns = wait_until - get_time_ns();
@@ -196,11 +250,14 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (ret <= 0 || !(pfd.revents & POLLIN))
                         continue;
 
+                /* Receive an incoming ICMP packet from the raw socket.  */
                 n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
                                          &src_addr, &src_addr_len);
                 if (n <= 0)
                         continue;
 
+                /* IPv4 raw sockets return the IP header; parse length and TTL.
+                 */
                 if (config->family == AF_INET && !st->is_dgram) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
                         hlen = ip_hdr->ip_hl << 2;
@@ -210,6 +267,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (n < (ssize_t)(hlen + st->header_size))
                         continue;
 
+                /* Extract ICMP header fields depending on address family.  */
                 if (config->family == AF_INET) {
                         struct icmp *r_icp = (struct icmp *)(recv_buf + hlen);
                         r_type = r_icp->icmp_type;
@@ -223,6 +281,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                         r_seq = r_icp->icmp6_seq;
                 }
 
+                /* Check if this is the reply to our request.  */
                 if (r_type != st->icmp_rep_type ||
                     (!st->is_dgram && r_id != htons(st->pid)))
                         continue;
@@ -290,7 +349,7 @@ print_statistics(const ping_config_t *config, const ping_state_t *st)
 
         if (st->received > 0 && config->payload_size >= 8) {
                 char min_buf[64], avg_buf[64], max_buf[64], mdev_buf[64];
-                uint64_t avg_us, variance_us, mdev_ns;
+                u_int64_t avg_us, variance_us, mdev_ns;
 
                 format_time(st->rtt_min, config->time_unit, min_buf,
                             sizeof(min_buf));
@@ -334,7 +393,7 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
                 die("Memory allocation failed for packet");
 
         if (config->pattern_len > 0) {
-                uint8_t *payload = st->packet + st->header_size;
+                u_char *payload = st->packet + st->header_size;
                 size_t i;
                 for (i = 0; i < config->payload_size; i++) {
                         payload[i] = config->pattern[i % config->pattern_len];
@@ -450,9 +509,9 @@ ping_run(const ping_config_t *config)
         }
 
         while (keep_running) {
-                uint64_t now;
-                uint64_t send_time;
-                uint64_t wait_until;
+                u_int64_t now;
+                u_int64_t send_time;
+                u_int64_t wait_until;
                 bool replied;
 
                 now = get_time_ns();
@@ -471,7 +530,7 @@ ping_run(const ping_config_t *config)
                 wait_until = config->flood ? send_time + config->interval_ns
                                            : send_time + config->timeout_ns;
                 if (config->deadline_ns > 0) {
-                        uint64_t deadline_end =
+                        u_int64_t deadline_end =
                             st.start_time + config->deadline_ns;
                         if (wait_until > deadline_end) {
                                 wait_until = deadline_end;
@@ -500,12 +559,12 @@ ping_run(const ping_config_t *config)
 
                 if (keep_running &&
                     (config->count == 0 || st.sent < config->count)) {
-                        uint64_t current = get_time_ns();
-                        uint64_t next_send_time =
+                        u_int64_t current = get_time_ns();
+                        u_int64_t next_send_time =
                             send_time + config->interval_ns;
 
                         if (config->adaptive) {
-                                uint64_t adaptive_interval =
+                                u_int64_t adaptive_interval =
                                     st.rtt_last > 0 ? st.rtt_last
                                                     : config->interval_ns;
                                 if (adaptive_interval < 2 * NS_PER_MS) {

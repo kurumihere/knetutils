@@ -1,3 +1,39 @@
+/***************************************************************************
+ * sniff.c -- Network sniffer utility logic                                *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "sniff.h"
 #include "net.h"
 #include "utils.h"
@@ -29,20 +65,20 @@
 #define PCAP_SNAPLEN 65535
 
 typedef struct {
-        uint32_t magic_number;
-        uint16_t version_major;
-        uint16_t version_minor;
-        int32_t thiszone;
-        uint32_t sigfigs;
-        uint32_t snaplen;
-        uint32_t network;
+        u_int magic_number;
+        u_short version_major;
+        u_short version_minor;
+        int thiszone;
+        u_int sigfigs;
+        u_int snaplen;
+        u_int network;
 } pcap_hdr_t;
 
 typedef struct {
-        uint32_t ts_sec;
-        uint32_t ts_usec;
-        uint32_t incl_len;
-        uint32_t orig_len;
+        u_int ts_sec;
+        u_int ts_usec;
+        u_int incl_len;
+        u_int orig_len;
 } pcaprec_hdr_t;
 
 static volatile sig_atomic_t keep_running = 1;
@@ -61,7 +97,7 @@ typedef struct {
 } sniff_state_t;
 
 static void
-write_pcap_packet(FILE *fp, const uint8_t *buf, ssize_t len)
+write_pcap_packet(FILE *fp, const u_char *buf, ssize_t len)
 {
         struct timespec ts;
         pcaprec_hdr_t rec;
@@ -70,10 +106,10 @@ write_pcap_packet(FILE *fp, const uint8_t *buf, ssize_t len)
                 return;
 
         clock_gettime(CLOCK_REALTIME, &ts);
-        rec.ts_sec = (uint32_t)ts.tv_sec;
-        rec.ts_usec = (uint32_t)(ts.tv_nsec / NS_PER_US);
-        rec.incl_len = (uint32_t)len;
-        rec.orig_len = (uint32_t)len;
+        rec.ts_sec = (u_int)ts.tv_sec;
+        rec.ts_usec = (u_int)(ts.tv_nsec / NS_PER_US);
+        rec.incl_len = (u_int)len;
+        rec.orig_len = (u_int)len;
 
         fwrite(&rec, sizeof(rec), 1, fp);
         fwrite(buf, 1, len, fp);
@@ -81,7 +117,7 @@ write_pcap_packet(FILE *fp, const uint8_t *buf, ssize_t len)
 }
 
 static void
-print_hex_dump(const uint8_t *data, size_t len)
+print_hex_dump(const u_char *data, size_t len)
 {
         size_t i, j;
         for (i = 0; i < len; i += 16) {
@@ -96,7 +132,7 @@ print_hex_dump(const uint8_t *data, size_t len)
                 printf(" \033[90m|\033[0m ");
                 for (j = 0; j < 16; j++) {
                         if (i + j < len) {
-                                uint8_t c = data[i + j];
+                                u_char c = data[i + j];
                                 if (c >= 32 && c <= 126) {
                                         printf("%c", c);
                                 } else {
@@ -111,7 +147,7 @@ print_hex_dump(const uint8_t *data, size_t len)
 }
 
 static size_t
-handle_tcp(const uint8_t *buf, size_t offset, ssize_t n)
+handle_tcp(const u_char *buf, size_t offset, ssize_t n)
 {
         struct tcphdr *tcp;
 
@@ -140,7 +176,7 @@ handle_tcp(const uint8_t *buf, size_t offset, ssize_t n)
 }
 
 static size_t
-handle_udp(const uint8_t *buf, size_t offset, ssize_t n)
+handle_udp(const u_char *buf, size_t offset, ssize_t n)
 {
         struct udphdr *udp;
 
@@ -155,7 +191,7 @@ handle_udp(const uint8_t *buf, size_t offset, ssize_t n)
 }
 
 static size_t
-handle_icmp(const uint8_t *buf, size_t offset, ssize_t n)
+handle_icmp(const u_char *buf, size_t offset, ssize_t n)
 {
         struct icmp *icmp;
 
@@ -170,7 +206,7 @@ handle_icmp(const uint8_t *buf, size_t offset, ssize_t n)
 }
 
 static size_t
-handle_icmpv6(const uint8_t *buf, size_t offset, ssize_t n)
+handle_icmpv6(const u_char *buf, size_t offset, ssize_t n)
 {
         struct icmp6_hdr *icmp6;
 
@@ -185,8 +221,7 @@ handle_icmpv6(const uint8_t *buf, size_t offset, ssize_t n)
 }
 
 static size_t
-handle_l4_protocol(const uint8_t *buf, size_t offset, ssize_t n,
-                   uint8_t l4_proto)
+handle_l4_protocol(const u_char *buf, size_t offset, ssize_t n, u_char l4_proto)
 {
         if (l4_proto == IPPROTO_TCP) {
                 return handle_tcp(buf, offset, n);
@@ -200,8 +235,13 @@ handle_l4_protocol(const uint8_t *buf, size_t offset, ssize_t n,
         return offset;
 }
 
+/*
+ *		H A N D L E _ I P V 4
+ *
+ * Parse an IPv4 header, print addressing info, and determine L4 protocol.
+ */
 static size_t
-handle_ipv4(const uint8_t *buf, size_t offset, ssize_t n, uint8_t *l4_proto)
+handle_ipv4(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
 {
         struct ip *ip_hdr;
         int hlen;
@@ -225,7 +265,7 @@ handle_ipv4(const uint8_t *buf, size_t offset, ssize_t n, uint8_t *l4_proto)
 }
 
 static size_t
-handle_ipv6(const uint8_t *buf, size_t offset, ssize_t n, uint8_t *l4_proto)
+handle_ipv6(const u_char *buf, size_t offset, ssize_t n, u_char *l4_proto)
 {
         struct ip6_hdr *ip6;
         char src_ip[INET6_ADDRSTRLEN];
@@ -246,12 +286,17 @@ handle_ipv6(const uint8_t *buf, size_t offset, ssize_t n, uint8_t *l4_proto)
         return offset + sizeof(struct ip6_hdr);
 }
 
+/*
+ *		P R O C E S S _ P A C K E T
+ *
+ * Decode Ethernet frames and dispatch to specific network layer handlers.
+ */
 static void
-process_packet(const sniff_config_t *config, const uint8_t *buf, ssize_t n)
+process_packet(const sniff_config_t *config, const u_char *buf, ssize_t n)
 {
         struct ether_header *eth;
-        uint16_t eth_type;
-        uint8_t l4_proto = 0;
+        u_short eth_type;
+        u_char l4_proto = 0;
         size_t offset;
         size_t next_offset;
 
@@ -272,6 +317,7 @@ process_packet(const sniff_config_t *config, const uint8_t *buf, ssize_t n)
         offset = sizeof(struct ether_header);
         next_offset = offset;
 
+        /* Branch based on the Ethernet type field.  */
         if (eth_type == ETHERTYPE_IP) {
                 next_offset = handle_ipv4(buf, offset, n, &l4_proto);
         } else if (eth_type == ETHERTYPE_IPV6) {
@@ -298,7 +344,7 @@ sniff_run(const sniff_config_t *config)
 {
         struct sigaction sa;
         sniff_state_t st;
-        __attribute__((aligned(8))) uint8_t buf[65536];
+        __attribute__((aligned(8))) u_char buf[65536];
 
         if (!config->iface) {
                 log_err("Interface is required for sniffing");

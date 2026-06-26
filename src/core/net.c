@@ -1,3 +1,39 @@
+/***************************************************************************
+ * net.c -- Cross-platform network abstractions and raw sockets            *
+ *                                                                         *
+ ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *                                                                         *
+ * knetutils is (C) 2026 kurumihere                                        *
+ *                                                                         *
+ * Redistribution and use in source and binary forms, with or without      *
+ * modification, are permitted provided that the following conditions are  *
+ * met:                                                                    *
+ *                                                                         *
+ * 1. Redistributions of source code must retain the above copyright       *
+ *    notice, this list of conditions and the following disclaimer.        *
+ *                                                                         *
+ * 2. Redistributions in binary form must reproduce the above copyright    *
+ *    notice, this list of conditions and the following disclaimer in the  *
+ *    documentation and/or other materials provided with the distribution. *
+ *                                                                         *
+ * 3. Neither the name of the copyright holder nor the names of its        *
+ *    contributors may be used to endorse or promote products derived from *
+ *    this software without specific prior written permission.             *
+ *                                                                         *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS     *
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       *
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A *
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT      *
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,  *
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT        *
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   *
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY   *
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT     *
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE   *
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    *
+ *                                                                         *
+ ***************************************************************************/
+
 #include "net.h"
 #include "utils.h"
 #include <arpa/inet.h>
@@ -34,7 +70,7 @@ struct net_socket {
 struct net_socket {
         int fd;
         bool is_dgram;
-        uint8_t *bpf_buf;
+        u_char *bpf_buf;
         size_t bpf_buf_len;
         size_t bpf_pos;
         size_t bpf_filled;
@@ -50,8 +86,16 @@ struct net_socket {
 #endif
 #endif
 
+/*
+ *		N E T _ G E T _ I F A C E _ M A C
+ *
+ * Fetch the MAC address for a given network interface.
+ * On Linux, this uses a dummy DGRAM socket to issue the SIOCGIFHWADDR ioctl.
+ * On BSD/macOS, it traverses the getifaddrs() linked list looking for an
+ * AF_LINK entry.
+ */
 bool
-net_get_iface_mac(const char *iface, uint8_t *mac)
+net_get_iface_mac(const char *iface, u_char *mac)
 {
 #ifdef __linux__
         int sock;
@@ -93,7 +137,7 @@ net_get_iface_mac(const char *iface, uint8_t *mac)
 }
 
 bool
-net_get_iface_ip(const char *iface, uint32_t *ip)
+net_get_iface_ip(const char *iface, u_int *ip)
 {
         struct ifaddrs *ifap, *ifa;
         bool found = false;
@@ -121,8 +165,16 @@ net_get_iface_index(const char *iface)
         return if_nametoindex(iface);
 }
 
+/*
+ *		N E T _ O P E N _ R A W _ S O C K E T
+ *
+ * Open a raw packet socket for link-layer (L2) injection.
+ * Linux: Binds an AF_PACKET socket to the specific interface index.
+ * BSD/macOS: Iterates through /dev/bpf* devices to find an available Berkeley
+ * Packet Filter, then binds it using BIOCSETIF and enables immediate mode.
+ */
 net_socket_t *
-net_open_raw_socket(const char *iface, uint16_t protocol)
+net_open_raw_socket(const char *iface, u_short protocol)
 {
 #ifdef __linux__
         int fd;
@@ -295,7 +347,7 @@ net_set_promiscuous(net_socket_t *sock)
 
 ssize_t
 net_send_packet(net_socket_t *sock, const void *buf, size_t len,
-                const uint8_t *dst_mac)
+                const u_char *dst_mac)
 {
 #ifdef __linux__
         struct sockaddr_ll sll;
@@ -384,7 +436,7 @@ net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
 }
 
 bool
-net_resolve_ipv4(const char *hostname, uint32_t *ip)
+net_resolve_ipv4(const char *hostname, u_int *ip)
 {
         struct addrinfo hints, *res;
         struct sockaddr_in *ipv4;
@@ -403,21 +455,21 @@ net_resolve_ipv4(const char *hostname, uint32_t *ip)
 }
 
 bool
-net_parse_mac(const char *mac_str, uint8_t *mac)
+net_parse_mac(const char *mac_str, u_char *mac)
 {
         unsigned int values[6];
         int i;
         if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1],
                    &values[2], &values[3], &values[4], &values[5]) == 6) {
                 for (i = 0; i < 6; ++i)
-                        mac[i] = (uint8_t)values[i];
+                        mac[i] = (u_char)values[i];
                 return true;
         }
         return false;
 }
 
 bool
-net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
+net_get_default_gateway(const char *iface, u_int *gateway_ip)
 {
 #ifdef __linux__
         FILE *fp;
@@ -436,8 +488,9 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
         while (fgets(line, sizeof(line), fp)) {
                 if (sscanf(line, "%127s %lx %lx", name, &dst, &gw) != 3)
                         continue;
+                /* Default gateway matched on the specified interface.  */
                 if (dst == 0 && strcmp(name, iface) == 0) {
-                        *gateway_ip = (uint32_t)gw;
+                        *gateway_ip = (u_int)gw;
                         fclose(fp);
                         return true;
                 }
@@ -466,6 +519,7 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
 
         next = buf;
         lim = buf + len;
+        /* Parse the routing table messages sequentially.  */
         while (next < lim) {
                 struct rt_msghdr *rtm;
                 struct sockaddr *sa;
@@ -484,6 +538,8 @@ net_get_default_gateway(const char *iface, uint32_t *gateway_ip)
 #ifndef SA_SIZE
 #define SA_SIZE(sa) ROUNDUP((sa)->sa_len)
 #endif
+                /* Traverse routing message addresses to find DST and GATEWAY.
+                 */
                 for (i = 0; i < RTAX_MAX; i++) {
                         if (!(rtm->rtm_addrs & (1 << i)))
                                 continue;
@@ -580,16 +636,16 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
         return true;
 }
 
-uint16_t
+u_short
 net_checksum(const void *b, int len)
 {
-        const uint16_t *buf = b;
+        const u_short *buf = b;
         unsigned int sum = 0;
-        uint16_t result;
+        u_short result;
         for (sum = 0; len > 1; len -= 2)
                 sum += *buf++;
         if (len == 1)
-                sum += *(const uint8_t *)buf;
+                sum += *(const u_char *)buf;
         sum = (sum >> 16) + (sum & 0xFFFF);
         sum += (sum >> 16);
         result = ~sum;
