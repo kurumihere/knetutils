@@ -42,7 +42,6 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-/* Terminal color ANSI escape sequences */
 #define COLOR_RESET "\x1b[0m"
 #define COLOR_RED "\x1b[31m"
 #define COLOR_GREEN "\x1b[32m"
@@ -51,7 +50,6 @@
 #define COLOR_CYAN "\x1b[36m"
 #define COLOR_BOLD "\x1b[1m"
 
-/* Time conversion constants */
 #define NS_PER_S 1000000000ULL
 #define NS_PER_MS 1000000ULL
 #define NS_PER_US 1000ULL

@@ -81,7 +81,6 @@ static void
 handle_sigint(int sig)
 {
         (void)sig;
-        /* Set flag to break out of the loop gracefully */
         keep_running = 0;
 }
 
@@ -124,12 +123,11 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
 {
         st->sock = net_open_ip_raw_socket(config->family, IPPROTO_TCP);
 
-        /* Ensure socket was created successfully */
         if (!st->sock) {
                 die("Failed to open raw TCP socket. Are you root?");
+                /* NOT REACHED */
         }
 
-        /* Bind to a specific interface or IP if requested */
         if (config->bind_iface) {
                 struct sockaddr_storage bind_addr;
 
@@ -156,7 +154,6 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
                                     config->bind_iface);
                         }
                 } else {
-                        /* Bind to interface device name */
                         if (setsockopt(net_get_fd(st->sock), SOL_SOCKET,
                                        SO_BINDTODEVICE, config->bind_iface,
                                        strlen(config->bind_iface)) < 0) {
@@ -175,23 +172,20 @@ setup_tcping_socket(const tcping_config_t *config, tcping_state_t *st)
 static void
 init_tcping_state(const tcping_config_t *config, tcping_state_t *st)
 {
-        /* Ensure the entire state structure is zero-initialized */
         memset(st, 0, sizeof(*st));
 
-        /* Convert target address to string for printing */
         getnameinfo((struct sockaddr *)&config->target_addr,
                     config->target_addr_len, st->target_str,
                     sizeof(st->target_str), NULL, 0, NI_NUMERICHOST);
 
-        /* Determine correct source IP for routing to target */
         st->src_addr_len = sizeof(st->src_addr);
         if (!net_get_source_ip_for(&config->target_addr,
                                    config->target_addr_len, &st->src_addr,
                                    &st->src_addr_len)) {
                 die("Failed to determine source IP for target");
+                /* NOT REACHED */
         }
 
-        /* Set an ephemeral source port and initial sequence number */
         st->sport = EPHEMERAL_PORT_BASE + (getpid() % EPHEMERAL_PORT_RANGE);
         st->seq = INITIAL_SEQ;
 }
@@ -209,7 +203,6 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         u_char *csum_buf = (u_char *)csum_buf_aligned;
         size_t csum_len = 0;
 
-        /* Prepare the TCP SYN header */
         memset(&tcph, 0, sizeof(tcph));
         tcph.th_sport = htons(st->sport);
         tcph.th_dport = htons(config->port);
@@ -221,7 +214,6 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         tcph.th_sum = 0;
         tcph.th_urp = 0;
 
-        /* Prepend IPv4 or IPv6 pseudo-header for checksum calculation */
         if (config->family == AF_INET) {
                 struct ipv4_pseudo_header psh;
                 psh.src_addr =
@@ -248,14 +240,12 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
                 csum_len += sizeof(psh);
         }
 
-        /* Append actual TCP header to checksum buffer */
         memcpy(csum_buf + csum_len, &tcph, sizeof(tcph));
         csum_len += sizeof(tcph);
 
-        /* Calculate and insert final checksum */
+        /* Calculate TCP checksum including pseudo header.  */
         tcph.th_sum = net_checksum(csum_buf, csum_len);
 
-        /* Send raw IP packet */
         if (net_send_ip_raw(st->sock, &tcph, sizeof(tcph),
                             (struct sockaddr *)&config->target_addr,
                             config->target_addr_len) < 0) {
@@ -275,17 +265,17 @@ print_tcping_reply(const tcping_config_t *config, const tcping_state_t *st,
 {
         char time_buf[64];
 
-        /* Skip output if quiet mode is active */
         if (config->quiet) {
                 return;
         }
 
         format_time(rtt, NULL, time_buf, sizeof(time_buf));
 
-        /* Identify response type and print formatted output */
+        /* SYN-ACK received indicating open port.  */
         if ((r_tcph->th_flags & TH_SYN) && (r_tcph->th_flags & TH_ACK)) {
                 printf("Reply from %s:%u (SYN-ACK) time=%s\n", st->target_str,
                        config->port, time_buf);
+                /* RST received indicating closed port.  */
         } else if (r_tcph->th_flags & TH_RST) {
                 printf("Reply from %s:%u (RST) time=%s\n", st->target_str,
                        config->port, time_buf);
@@ -305,7 +295,6 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
         pfd.fd = net_get_fd(st->sock);
         pfd.events = POLLIN;
 
-        /* Wait for and process incoming packets until timeout */
         while (get_time_ns() < wait_until && keep_running) {
                 int64_t timeout_ns;
                 int timeout_ms;
@@ -328,7 +317,6 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
 
                 ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
 
-                /* Ignore timeouts and errors */
                 if (ret <= 0 || !(pfd.revents & POLLIN)) {
                         continue;
                 }
@@ -336,30 +324,27 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                 n = net_recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
                                     &from_addr, &from_addr_len);
 
-                /* Ignore empty packets */
                 if (n <= 0) {
                         continue;
                 }
 
                 if (config->family == AF_INET) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
+                        /* Calculate IPv4 header length from IHL field.  */
                         hlen = ip_hdr->ip_hl << IPV4_HLEN_SHIFT;
                 }
 
-                /* Ensure packet has room for TCP header */
                 if (n < (ssize_t)(hlen + sizeof(struct tcphdr))) {
                         continue;
                 }
 
                 r_tcph = (struct tcphdr *)(recv_buf + hlen);
 
-                /* Filter out packets not matching our ports */
                 if (r_tcph->th_dport != htons(st->sport) ||
                     r_tcph->th_sport != htons(config->port)) {
                         continue;
                 }
 
-                /* Detect successful connection (SYN-ACK) or rejection (RST) */
                 if (((r_tcph->th_flags & TH_SYN) &&
                      (r_tcph->th_flags & TH_ACK)) ||
                     (r_tcph->th_flags & TH_RST)) {
@@ -384,7 +369,6 @@ print_tcping_stats(const tcping_config_t *config, const tcping_state_t *st)
 {
         u_int loss_pct;
 
-        /* Skip output if quiet mode is active */
         if (config->quiet) {
                 return;
         }
@@ -413,7 +397,6 @@ tcping_run(const tcping_config_t *config)
         struct sigaction sa;
         tcping_state_t st;
 
-        /* Register signal handlers to stop ping loop gracefully */
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
@@ -423,7 +406,6 @@ tcping_run(const tcping_config_t *config)
         init_tcping_state(config, &st);
         setup_tcping_socket(config, &st);
 
-        /* Drop privileges for security */
         if (setgid(getgid()) != 0) {
                 log_warn("Failed to drop group privileges");
         }
@@ -431,18 +413,15 @@ tcping_run(const tcping_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
-        /* Print initial start message */
         if (!config->quiet) {
                 printf("TCPING %s:%u\n", st.target_str, config->port);
         }
 
-        /* Ping loop */
         while (keep_running) {
                 u_int64_t send_time;
                 u_int64_t wait_until;
                 bool replied;
 
-                /* Check packet count limit */
                 if (config->count > 0 && st.sent >= config->count) {
                         break;
                 }
@@ -454,7 +433,6 @@ tcping_run(const tcping_config_t *config)
 
                 replied = recv_tcping_reply(config, &st, wait_until, send_time);
 
-                /* Report timeout if no reply was received */
                 if (!replied && !config->quiet) {
                         printf("Timeout waiting for reply from %s:%u\n",
                                st.target_str, config->port);
@@ -462,7 +440,6 @@ tcping_run(const tcping_config_t *config)
 
                 st.seq++;
 
-                /* Sleep for the remainder of the interval */
                 if (keep_running &&
                     (config->count == 0 || st.sent < config->count)) {
                         u_int64_t current = get_time_ns();
@@ -479,7 +456,6 @@ tcping_run(const tcping_config_t *config)
 
         print_tcping_stats(config, &st);
 
-        /* Success if at least one reply was received */
         if (st.received > 0) {
                 return EXIT_SUCCESS;
         }

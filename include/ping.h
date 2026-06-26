@@ -41,7 +41,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-/* Maximum length for a custom ping payload pattern */
 #define PING_MAX_PATTERN_LEN 16
 
 /*

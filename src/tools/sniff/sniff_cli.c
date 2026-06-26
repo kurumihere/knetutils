@@ -68,7 +68,6 @@ print_usage(const char *prog_name)
                          .usage_args = "[options]",
                          .options = sniff_options};
 
-        /* Delegate to common CLI help printer */
         cli_print_help(&app);
 }
 
@@ -86,10 +85,8 @@ sniff_cli_main(int c, char **av)
 
         prog_name = *av;
 
-        /* Ensure configuration is fully zero-initialized */
         memset(&config, 0, sizeof(config));
 
-        /* Parse CLI options using getopt */
         while ((ch = getopt(c, av, "I:c:w:vh")) != -1) {
                 switch (ch) {
                 case 'I':
@@ -99,6 +96,7 @@ sniff_cli_main(int c, char **av)
                         config.max_packets = atoi(optarg);
                         break;
                 case 'w':
+                        /* Save captured packets to PCAP format file.  */
                         config.pcap_file = optarg;
                         break;
                 case 'v':
@@ -113,22 +111,19 @@ sniff_cli_main(int c, char **av)
                 }
         }
 
-        /* Adjust argument counts using strict pointer arithmetic */
         c -= optind;
         av += optind;
 
-        /* The interface flag is mandatory for sniffing */
         if (!config.iface) {
                 log_err("Interface is required (-I)");
                 print_usage(prog_name);
                 return EXIT_FAILURE;
         }
 
-        /* Check for root permissions */
+        /* Raw sockets require root capabilities.  */
         if (getuid() != 0) {
                 log_warn("sniff requires root privileges to open raw sockets.");
         }
 
-        /* Delegate to the core run logic */
         return sniff_run(&config);
 }

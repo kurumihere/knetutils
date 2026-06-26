@@ -91,7 +91,6 @@ ping_cli_main(int c, char **av)
         int ch;
         const char *target_ip_str;
 
-        /* Initialize memory. */
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
@@ -102,10 +101,10 @@ ping_cli_main(int c, char **av)
 
         config.family = AF_UNSPEC;
 
-        /* Loop until condition is met. */
         while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
                 switch (ch) {
                 case '4':
+                        /* Force IPv4 address resolution and socket creation. */
                         config.family = AF_INET;
                         break;
                 case '6':
@@ -147,12 +146,13 @@ ping_cli_main(int c, char **av)
                         config.payload_size = (u_int)atoi(optarg);
                         break;
                 case 'p': {
+                        /* Parse hex pattern to construct custom ICMP payload.
+                         */
                         size_t len = strlen(optarg);
                         size_t i;
                         if (len > 32)
                                 len = 32;
                         config.pattern_len = len / 2;
-                        /* Iterate over elements. */
                         for (i = 0; i < config.pattern_len; i++) {
                                 unsigned int byte;
                                 sscanf(optarg + i * 2, "%2x", &byte);
@@ -161,6 +161,8 @@ ping_cli_main(int c, char **av)
                         break;
                 }
                 case 'Q':
+                        /* Set IP Type of Service (ToS) / Differentiated
+                         * Services Field.  */
                         config.tos = (int)strtol(optarg, NULL, 0);
                         config.has_tos = true;
                         break;
@@ -172,11 +174,9 @@ ping_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
-                        /* Return the result or status code. */
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
-                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
         }
@@ -186,7 +186,6 @@ ping_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
-                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -194,6 +193,7 @@ ping_cli_main(int c, char **av)
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
+                /* NOT REACHED */
         }
         config.family = config.target_addr.ss_family;
 
@@ -206,6 +206,5 @@ ping_cli_main(int c, char **av)
                     "ping may require root privileges to open raw sockets.");
         }
 
-        /* Return the result or status code. */
         return ping_run(&config);
 }

@@ -84,7 +84,6 @@ pscan_cli_main(int c, char **av)
         int ch;
         const char *target_ip_str;
 
-        /* Initialize memory. */
         memset(&config, 0, sizeof(config));
 
         config.family = AF_UNSPEC;
@@ -92,16 +91,19 @@ pscan_cli_main(int c, char **av)
         config.start_port = 1;
         config.end_port = 1024;
 
-        /* Loop until condition is met. */
         while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
                 switch (ch) {
                 case 'u':
+                        /* Enable UDP port scanning instead of TCP SYN scanning.
+                         */
                         config.udp = true;
                         break;
                 case 's':
                         config.banner_grab = true;
                         break;
                 case 'O':
+                        /* Enable OS fingerprinting via TCP/IP header
+                         * inspection.  */
                         config.os_fingerprint = true;
                         break;
                 case 'j':
@@ -117,8 +119,9 @@ pscan_cli_main(int c, char **av)
                         config.family = AF_INET6;
                         break;
                 case 'p': {
+                        /* Extract start and end port numbers for the scan
+                         * range.  */
                         char *dash = strchr(optarg, '-');
-                        /* Check condition and handle accordingly. */
                         if (dash) {
                                 *dash = '\0';
                                 config.start_port = (u_short)atoi(optarg);
@@ -130,6 +133,7 @@ pscan_cli_main(int c, char **av)
                         if (config.start_port == 0 || config.end_port == 0 ||
                             config.start_port > config.end_port) {
                                 die("Invalid port range");
+                                /* NOT REACHED */
                         }
                         break;
                 }
@@ -144,11 +148,9 @@ pscan_cli_main(int c, char **av)
                         break;
                 case 'h':
                         print_usage(*av);
-                        /* Return the result or status code. */
                         return EXIT_SUCCESS;
                 default:
                         print_usage(*av);
-                        /* Return the result or status code. */
                         return EXIT_FAILURE;
                 }
         }
@@ -158,7 +160,6 @@ pscan_cli_main(int c, char **av)
 
         if (c < 1) {
                 log_err("Target IP/hostname is required");
-                /* Return the result or status code. */
                 return EXIT_FAILURE;
         }
 
@@ -167,8 +168,8 @@ pscan_cli_main(int c, char **av)
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
+                /* NOT REACHED */
         }
 
-        /* Return the result or status code. */
         return pscan_run(&config);
 }

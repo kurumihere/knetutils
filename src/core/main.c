@@ -71,11 +71,9 @@ get_basename(const char *path)
 static void
 print_main_usage(void)
 {
-        /* Print the banner and usage instructions */
         fprintf(stderr, "knetutils - a collection of network utilities\n\n");
         fprintf(stderr, "Usage: knetutils <command> [args]\n\n");
 
-        /* Print the available commands */
         fprintf(stderr, "Commands:\n");
         fprintf(stderr, "  arping      discover and probe hosts on a local "
                         "network using ARP\n");
@@ -94,7 +92,6 @@ print_main_usage(void)
             stderr,
             "  traceroute  print the route packets trace to network host\n\n");
 
-        /* Print the help hint */
         fprintf(stderr, "Run 'knetutils <command> -h' for more information on "
                         "a command.\n");
 }
@@ -110,12 +107,10 @@ main(int c, char **av)
         const char *prog_name;
         const char *cmd;
 
-        /* Ensure we have at least the program name in arguments */
         if (c < MIN_ARGS) {
                 return EXIT_FAILURE;
         }
 
-        /* Extract the basename of the executed binary */
         prog_name = get_basename(*av);
 
         /*
@@ -124,10 +119,12 @@ main(int c, char **av)
          */
         if (strcmp(prog_name, "arping") == 0) {
                 return arping_cli_main(c, av);
+                /* Dispatch to ICMP ECHO_REQUEST utility.  */
         } else if (strcmp(prog_name, "ping") == 0) {
                 return ping_cli_main(c, av);
         } else if (strcmp(prog_name, "sniff") == 0) {
                 return sniff_cli_main(c, av);
+                /* Dispatch to TCP SYN latency utility.  */
         } else if (strcmp(prog_name, "tcping") == 0) {
                 return tcping_cli_main(c, av);
         } else if (strcmp(prog_name, "traceroute") == 0) {
@@ -136,16 +133,13 @@ main(int c, char **av)
                 return pscan_cli_main(c, av);
         }
 
-        /* If no subcommand was provided, display help and exit */
         if (c < MIN_SUBCMD_ARGS) {
                 print_main_usage();
                 return EXIT_FAILURE;
         }
 
-        /* Extract the subcommand from the arguments */
         cmd = *(av + 1);
 
-        /* Dispatch to the appropriate subcommand logic */
         if (strcmp(cmd, "arping") == 0) {
                 return arping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "ping") == 0) {
@@ -156,15 +150,14 @@ main(int c, char **av)
                 return tcping_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "traceroute") == 0) {
                 return traceroute_cli_main(c - 1, av + 1);
+                /* Dispatch to TCP SYN and UDP port scanner.  */
         } else if (strcmp(cmd, "pscan") == 0) {
                 return pscan_cli_main(c - 1, av + 1);
         } else if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
-                /* Handle global help request */
                 print_main_usage();
                 return EXIT_SUCCESS;
         }
 
-        /* Subcommand not recognized, print error and exit */
         fprintf(stderr, "knetutils: Unknown command '%s'\n", cmd);
         return EXIT_FAILURE;
 }

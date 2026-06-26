@@ -71,7 +71,6 @@ print_usage(const char *prog_name)
                          .usage_args = "[options] <destination>",
                          .options = traceroute_options};
 
-        /* Delegate to common CLI help printer */
         cli_print_help(&app);
 }
 
@@ -90,7 +89,6 @@ traceroute_cli_main(int c, char **av)
 
         prog_name = *av;
 
-        /* Ensure configuration is fully zero-initialized */
         memset(&config, 0, sizeof(config));
 
         config.first_ttl = 1;
@@ -100,10 +98,10 @@ traceroute_cli_main(int c, char **av)
         config.family = AF_UNSPEC;
         config.resolve_hostnames = true;
 
-        /* Parse CLI options using getopt */
         while ((ch = getopt(c, av, "46f:m:q:w:I:nUh")) != -1) {
                 switch (ch) {
                 case '4':
+                        /* Force IPv4 address family.  */
                         config.family = AF_INET;
                         break;
                 case '6':
@@ -139,39 +137,35 @@ traceroute_cli_main(int c, char **av)
                 }
         }
 
-        /* Adjust argument counts using strict pointer arithmetic */
         c -= optind;
         av += optind;
 
-        /* Verify destination positional argument */
         if (c < 1) {
                 log_err("Target IP/hostname is required");
                 print_usage(prog_name);
                 return EXIT_FAILURE;
         }
 
-        /* Extract target IP using strict pointer dereferencing */
         target_ip_str = *av;
 
-        /* Attempt to resolve the provided hostname or IP */
+        /* Resolve target IP or hostname to network address.  */
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
+                /* NOT REACHED */
         }
 
         config.family = config.target_addr.ss_family;
 
-        /* Ensure TTL starts at least at 1 */
         if (config.first_ttl == 0) {
                 config.first_ttl = 1;
         }
 
-        /* Check for root permissions */
         if (getuid() != 0) {
+                /* Raw sockets require root privileges.  */
                 log_warn("traceroute requires root privileges to open raw "
                          "sockets.");
         }
 
-        /* Delegate to the core run logic */
         return traceroute_run(&config);
 }

@@ -69,7 +69,6 @@ print_usage(const char *prog_name)
                          .usage_args = "[options] <destination> <port>",
                          .options = tcping_options};
 
-        /* Delegate to common CLI help printer */
         cli_print_help(&app);
 }
 
@@ -88,7 +87,6 @@ tcping_cli_main(int c, char **av)
 
         prog_name = *av;
 
-        /* Ensure configuration is fully zero-initialized */
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
@@ -96,13 +94,14 @@ tcping_cli_main(int c, char **av)
         config.interval_ns = NS_PER_S;
         config.family = AF_UNSPEC;
 
-        /* Parse CLI options using getopt */
         while ((ch = getopt(c, av, "46c:W:i:I:qh")) != -1) {
                 switch (ch) {
                 case '4':
+                        /* Force IPv4 address family.  */
                         config.family = AF_INET;
                         break;
                 case '6':
+                        /* Force IPv6 address family.  */
                         config.family = AF_INET6;
                         break;
                 case 'c':
@@ -130,11 +129,9 @@ tcping_cli_main(int c, char **av)
                 }
         }
 
-        /* Adjust argument counts using strict pointer arithmetic */
         c -= optind;
         av += optind;
 
-        /* Verify destination and port positional arguments */
         if (c < 1) {
                 log_err("Target IP/hostname is required");
                 print_usage(prog_name);
@@ -147,29 +144,28 @@ tcping_cli_main(int c, char **av)
                 return EXIT_FAILURE;
         }
 
-        /* Extract target IP and port using strict pointer dereferencing */
         target_ip_str = *av;
         config.port = (u_short)atoi(*(av + 1));
 
-        /* Ensure valid port parsing */
         if (config.port == 0) {
                 die("Invalid port: %s", *(av + 1));
+                /* NOT REACHED */
         }
 
-        /* Attempt to resolve the provided hostname or IP */
+        /* Resolve target hostname to IP address.  */
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
+                /* NOT REACHED */
         }
 
         config.family = config.target_addr.ss_family;
 
-        /* Check for root permissions */
+        /* Raw sockets require root capabilities.  */
         if (getuid() != 0) {
                 log_warn(
                     "tcping requires root privileges to open raw sockets.");
         }
 
-        /* Delegate to the core run logic */
         return tcping_run(&config);
 }

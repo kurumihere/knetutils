@@ -50,29 +50,25 @@ cli_print_help(const cli_app_t *app)
 {
         size_t i;
 
-        /* Verify the application context is valid */
         if (!app || !app->prog_name) {
                 return;
         }
 
-        /* Print the generic usage format */
         fprintf(stderr, "Usage: %s %s\n", app->prog_name,
                 app->usage_args ? app->usage_args : "");
         fprintf(stderr, "Options:\n");
 
-        /* If no options exist, we are done */
         if (!app->options) {
                 return;
         }
 
-        /* Iterate over all provided options and display their help text */
+        /* Iterate until null sentinel option is reached.  */
         for (i = 0; app->options[i].short_opt != '\0'; i++) {
                 const cli_option_t *opt = &app->options[i];
                 char opt_str[OPT_STR_MAX];
                 const char *desc;
 
-                /* Format the option string depending on whether it takes an
-                 * argument */
+                /* Format the CLI option string.  */
                 if (opt->arg_name) {
                         snprintf(opt_str, sizeof(opt_str), "-%c <%s>",
                                  opt->short_opt, opt->arg_name);
@@ -81,7 +77,6 @@ cli_print_help(const cli_app_t *app)
                                  opt->short_opt);
                 }
 
-                /* Print the aligned option string */
                 fprintf(stderr, "  %-14s  ", opt_str);
 
                 /* Print the description, handling newlines for proper

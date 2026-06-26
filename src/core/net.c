@@ -111,23 +111,19 @@ net_get_iface_mac(const char *iface, u_char *mac)
         int sock;
         struct ifreq ifr;
 
-        /* Create a dummy socket for the ioctl */
         sock = socket(AF_INET, SOCK_DGRAM, 0);
         if (sock < 0) {
                 return false;
         }
 
-        /* Set up the ifreq structure with the interface name */
         memset(&ifr, 0, sizeof(ifr));
         strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
 
-        /* Perform the ioctl to get hardware address */
         if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
                 close(sock);
                 return false;
         }
 
-        /* Copy the MAC address and close socket */
         memcpy(mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
         close(sock);
         return true;
@@ -135,18 +131,15 @@ net_get_iface_mac(const char *iface, u_char *mac)
         struct ifaddrs *ifap, *ifa;
         bool found = false;
 
-        /* Retrieve the list of interface addresses */
         if (getifaddrs(&ifap) != 0) {
                 return false;
         }
 
-        /* Iterate over the interfaces to find the requested one */
         for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
                 if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_LINK &&
                     strcmp(ifa->ifa_name, iface) == 0) {
                         struct sockaddr_dl *sdl;
 
-                        /* Extract the link-layer address */
                         sdl = (struct sockaddr_dl *)ifa->ifa_addr;
                         memcpy(mac, LLADDR(sdl), ETH_ALEN);
                         found = true;
@@ -170,18 +163,15 @@ net_get_iface_ip(const char *iface, u_int *ip)
         struct ifaddrs *ifap, *ifa;
         bool found = false;
 
-        /* Retrieve the list of interface addresses */
         if (getifaddrs(&ifap) != 0) {
                 return false;
         }
 
-        /* Iterate over the interfaces to find an IPv4 match */
         for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
                 if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET &&
                     strcmp(ifa->ifa_name, iface) == 0) {
                         struct sockaddr_in *sin;
 
-                        /* Extract the IP address */
                         sin = (struct sockaddr_in *)ifa->ifa_addr;
                         *ip = sin->sin_addr.s_addr;
                         found = true;
@@ -201,7 +191,6 @@ net_get_iface_ip(const char *iface, u_int *ip)
 int
 net_get_iface_index(const char *iface)
 {
-        /* Simply delegate to the standard POSIX function */
         return if_nametoindex(iface);
 }
 
@@ -222,20 +211,18 @@ net_open_raw_socket(const char *iface, u_short protocol)
         struct sockaddr_ll sll;
         net_socket_t *sock;
 
-        /* Open a raw packet socket */
+        /* Open AF_PACKET socket for L2 frame injection.  */
         fd = socket(AF_PACKET, SOCK_RAW, htons(protocol));
         if (fd < 0) {
                 return NULL;
         }
 
-        /* Resolve the interface index */
         ifindex = net_get_iface_index(iface);
         if (ifindex == 0) {
                 close(fd);
                 return NULL;
         }
 
-        /* Bind the socket to the interface */
         memset(&sll, 0, sizeof(sll));
         sll.sll_family = AF_PACKET;
         sll.sll_ifindex = ifindex;
@@ -246,7 +233,6 @@ net_open_raw_socket(const char *iface, u_short protocol)
                 return NULL;
         }
 
-        /* Allocate our opaque socket wrapper */
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_raw_socket: memory allocation failed");
@@ -270,7 +256,6 @@ net_open_raw_socket(const char *iface, u_short protocol)
 
         (void)protocol;
 
-        /* Iterate to find an available BPF device */
         for (i = 0; i < MAX_BPF_DEVS; i++) {
                 snprintf(bpf_path, sizeof(bpf_path), "/dev/bpf%d", i);
                 fd = open(bpf_path, O_RDWR);
@@ -279,12 +264,10 @@ net_open_raw_socket(const char *iface, u_short protocol)
                 }
         }
 
-        /* Ensure we actually got a BPF device */
         if (fd < 0) {
                 return NULL;
         }
 
-        /* Attach the BPF device to the specified interface */
         memset(&ifr, 0, sizeof(ifr));
         strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
         if (ioctl(fd, BIOCSETIF, &ifr) < 0) {
@@ -292,16 +275,13 @@ net_open_raw_socket(const char *iface, u_short protocol)
                 return NULL;
         }
 
-        /* Enable immediate mode so packets return right away */
         ioctl(fd, BIOCIMMEDIATE, &opt);
 
-        /* Retrieve the required buffer length for this BPF instance */
         if (ioctl(fd, BIOCGBLEN, &blen) < 0) {
                 close(fd);
                 return NULL;
         }
 
-        /* Allocate the socket wrapper */
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_raw_socket: memory allocation failed");
@@ -316,7 +296,6 @@ net_open_raw_socket(const char *iface, u_short protocol)
         sock->bpf_pos = 0;
         sock->bpf_filled = 0;
 
-        /* Ensure buffer allocation succeeded */
         if (!sock->bpf_buf) {
                 log_err("net_open_raw_socket: memory allocation failed for "
                         "bpf_buf");
@@ -346,10 +325,8 @@ net_open_icmp_socket(int family)
         proto = (family == AF_INET6) ? IPPROTO_ICMPV6 : IPPROTO_ICMP;
         is_dgram = false;
 
-        /* Attempt to open a raw socket first */
         fd = socket(family, SOCK_RAW, proto);
 
-        /* Fallback to datagram ICMP socket (macOS / ping unprivileged) */
         if (fd < 0) {
                 fd = socket(family, SOCK_DGRAM, proto);
                 if (fd < 0) {
@@ -358,7 +335,6 @@ net_open_icmp_socket(int family)
                 is_dgram = true;
         }
 
-        /* Allocate the socket wrapper */
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_icmp_socket: memory allocation failed");
@@ -383,7 +359,6 @@ net_open_icmp_socket(int family)
 bool
 net_is_dgram(net_socket_t *sock)
 {
-        /* Return false if socket is null */
         if (!sock) {
                 return false;
         }
@@ -398,7 +373,6 @@ net_is_dgram(net_socket_t *sock)
 void
 net_close_raw_socket(net_socket_t *sock)
 {
-        /* Ensure socket exists before freeing */
         if (!sock) {
                 return;
         }
@@ -421,7 +395,6 @@ net_set_promiscuous(net_socket_t *sock)
 #ifdef __linux__
         struct packet_mreq mr;
 
-        /* Set up the membership request to enable promiscuous mode */
         memset(&mr, 0, sizeof(mr));
         mr.mr_ifindex = sock->ifindex;
         mr.mr_type = PACKET_MR_PROMISC;
@@ -432,7 +405,6 @@ net_set_promiscuous(net_socket_t *sock)
         }
         return true;
 #else
-        /* Request promiscuous mode via BPF ioctl */
         if (ioctl(sock->fd, BIOCPROMISC, NULL) < 0) {
                 return false;
         }
@@ -452,10 +424,10 @@ net_send_packet(net_socket_t *sock, const void *buf, size_t len,
 #ifdef __linux__
         struct sockaddr_ll sll;
 
-        /* Populate the link-layer address structure */
         memset(&sll, 0, sizeof(sll));
         sll.sll_family = AF_PACKET;
         sll.sll_ifindex = sock->ifindex;
+        /* Set hardware address length to 6 bytes for Ethernet.  */
         sll.sll_halen = ETH_ALEN;
 
         if (dst_mac) {
@@ -467,7 +439,6 @@ net_send_packet(net_socket_t *sock, const void *buf, size_t len,
 #else
         (void)dst_mac;
 
-        /* BPF sockets simply use write() to inject frames */
         return write(sock->fd, buf, len);
 #endif
 }
@@ -481,13 +452,11 @@ ssize_t
 net_recv_packet(net_socket_t *sock, void *buf, size_t len)
 {
 #ifdef __linux__
-        /* Linux AF_PACKET allows direct reading of frames */
         return recvfrom(sock->fd, buf, len, 0, NULL, NULL);
 #else
         struct bpf_hdr *hdr;
         size_t packet_len;
 
-        /* Check if we need to refill the BPF buffer */
         if (sock->bpf_pos >= sock->bpf_filled) {
                 ssize_t n = read(sock->fd, sock->bpf_buf, sock->bpf_buf_len);
                 if (n <= 0) {
@@ -497,17 +466,14 @@ net_recv_packet(net_socket_t *sock, void *buf, size_t len)
                 sock->bpf_pos = 0;
         }
 
-        /* Parse the BPF header to extract the actual frame */
         hdr = (struct bpf_hdr *)(sock->bpf_buf + sock->bpf_pos);
         packet_len = hdr->bh_caplen;
         if (packet_len > len) {
                 packet_len = len;
         }
 
-        /* Copy the frame into the provided buffer */
         memcpy(buf, sock->bpf_buf + sock->bpf_pos + hdr->bh_hdrlen, packet_len);
 
-        /* Advance the buffer position, ensuring strict alignment */
         sock->bpf_pos += BPF_WORDALIGN(hdr->bh_hdrlen + hdr->bh_caplen);
 
         return packet_len;
@@ -523,7 +489,6 @@ ssize_t
 net_send_icmp_packet(net_socket_t *sock, const void *buf, size_t len,
                      const struct sockaddr *dest, socklen_t dest_len)
 {
-        /* Delegate directly to standard sendto */
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
@@ -536,7 +501,6 @@ ssize_t
 net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
                      struct sockaddr_storage *src, socklen_t *src_len)
 {
-        /* Delegate directly to standard recvfrom */
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
@@ -548,7 +512,6 @@ net_recv_icmp_packet(net_socket_t *sock, void *buf, size_t len,
 int
 net_get_fd(net_socket_t *sock)
 {
-        /* Safely extract the descriptor */
         if (!sock) {
                 return -1;
         }
@@ -566,16 +529,13 @@ net_resolve_host(const char *hostname, int family, struct sockaddr_storage *ss,
 {
         struct addrinfo hints, *res;
 
-        /* Setup resolution hints */
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = family;
 
-        /* Attempt the resolution query */
         if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
                 return false;
         }
 
-        /* Copy out the first resolved address */
         memcpy(ss, res->ai_addr, res->ai_addrlen);
         *ss_len = res->ai_addrlen;
 
@@ -594,16 +554,13 @@ net_resolve_ipv4(const char *hostname, u_int *ip)
         struct addrinfo hints, *res;
         struct sockaddr_in *ipv4;
 
-        /* Restrict query to AF_INET */
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_INET;
 
-        /* Perform DNS resolution */
         if (getaddrinfo(hostname, NULL, &hints, &res) != 0) {
                 return false;
         }
 
-        /* Extract the raw network-byte-order integer */
         ipv4 = (struct sockaddr_in *)res->ai_addr;
         *ip = ipv4->sin_addr.s_addr;
 
@@ -622,11 +579,9 @@ net_parse_mac(const char *mac_str, u_char *mac)
         u_int values[MAC_OCTETS];
         int i;
 
-        /* Attempt to parse six hex values */
         if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1],
                    &values[2], &values[3], &values[4],
                    &values[5]) == MAC_OCTETS) {
-                /* Cast to u_char and store */
                 for (i = 0; i < MAC_OCTETS; ++i) {
                         mac[i] = (u_char)values[i];
                 }
@@ -651,19 +606,16 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         char name[MAX_IFACE_LEN];
         u_long dst, gw;
 
-        /* Open the procfs routing table */
         fp = fopen("/proc/net/route", "r");
         if (!fp) {
                 return false;
         }
 
-        /* Skip the table header line */
         if (!fgets(line, sizeof(line), fp)) {
                 fclose(fp);
                 return false;
         }
 
-        /* Iterate over each route entry */
         while (fgets(line, sizeof(line), fp)) {
                 if (sscanf(line, "%127s %lx %lx", name, &dst, &gw) != 3) {
                         continue;
@@ -687,19 +639,16 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         char *next;
         char *lim;
 
-        /* Request the required buffer length for routing table dump */
         if (sysctl(mib, 6, NULL, &len, NULL, 0) < 0) {
                 return false;
         }
 
-        /* Allocate the buffer */
         buf = calloc(1, len);
         if (!buf) {
                 log_err("net_get_default_gateway: memory allocation failed");
                 return false;
         }
 
-        /* Execute the sysctl to fetch the routes */
         if (sysctl(mib, 6, buf, &len, NULL, 0) < 0) {
                 free(buf);
                 return false;
@@ -708,7 +657,6 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
         next = buf;
         lim = buf + len;
 
-        /* Parse the routing table messages sequentially */
         while (next < lim) {
                 struct rt_msghdr *rtm;
                 struct sockaddr *sa;
@@ -727,7 +675,6 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
 #ifndef SA_SIZE
 #define SA_SIZE(sa) ROUNDUP((sa)->sa_len)
 #endif
-                /* Traverse routing message addresses to find DST and GATEWAY */
                 for (i = 0; i < RTAX_MAX; i++) {
                         if (!(rtm->rtm_addrs & (1 << i))) {
                                 continue;
@@ -741,7 +688,6 @@ net_get_default_gateway(const char *iface, u_int *gateway_ip)
                         sa = (struct sockaddr *)((char *)sa + SA_SIZE(sa));
                 }
 
-                /* Match a default gateway via the desired interface index */
                 if (dst && dst->sin_addr.s_addr == 0 && gw &&
                     rtm->rtm_index == if_nametoindex(iface)) {
                         *gateway_ip = gw->sin_addr.s_addr;
@@ -766,13 +712,11 @@ net_open_ip_raw_socket(int family, int protocol)
         int fd;
         net_socket_t *sock;
 
-        /* Create the raw IP socket */
         fd = socket(family, SOCK_RAW, protocol);
         if (fd < 0) {
                 return NULL;
         }
 
-        /* Allocate the socket wrapper */
         sock = calloc(1, sizeof(net_socket_t));
         if (!sock) {
                 log_err("net_open_ip_raw_socket: memory allocation failed");
@@ -798,7 +742,6 @@ ssize_t
 net_send_ip_raw(net_socket_t *sock, const void *buf, size_t len,
                 const struct sockaddr *dest, socklen_t dest_len)
 {
-        /* Just pass through to standard sendto */
         return sendto(sock->fd, buf, len, 0, dest, dest_len);
 }
 
@@ -811,7 +754,6 @@ ssize_t
 net_recv_ip_raw(net_socket_t *sock, void *buf, size_t len,
                 struct sockaddr_storage *src, socklen_t *src_len)
 {
-        /* Just pass through to standard recvfrom */
         return recvfrom(sock->fd, buf, len, 0, (struct sockaddr *)src, src_len);
 }
 
@@ -828,13 +770,11 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
         int sock;
         struct sockaddr_storage dst_copy;
 
-        /* Create a dummy UDP socket */
         sock = socket(dst->ss_family, SOCK_DGRAM, 0);
         if (sock < 0) {
                 return false;
         }
 
-        /* Set a dummy port (like DNS) to ensure routing resolves */
         memcpy(&dst_copy, dst, dst_len);
         if (dst_copy.ss_family == AF_INET) {
                 struct sockaddr_in *sin = (struct sockaddr_in *)&dst_copy;
@@ -848,13 +788,12 @@ net_get_source_ip_for(const struct sockaddr_storage *dst, socklen_t dst_len,
                 }
         }
 
-        /* Connect to force the kernel to bind a local address */
+        /* Perform UDP connect to route target and determine source IP.  */
         if (connect(sock, (const struct sockaddr *)&dst_copy, dst_len) < 0) {
                 close(sock);
                 return false;
         }
 
-        /* Retrieve the locally bound address */
         if (getsockname(sock, (struct sockaddr *)src, src_len) < 0) {
                 close(sock);
                 return false;
@@ -876,21 +815,17 @@ net_checksum(const void *b, int len)
         u_int sum = 0;
         u_short result;
 
-        /* Sum over 16-bit words */
         for (sum = 0; len > 1; len -= 2) {
                 sum += *buf++;
         }
 
-        /* Add residual byte if length was odd */
         if (len == 1) {
                 sum += *(const u_char *)buf;
         }
 
-        /* Fold the carry bits into the lower 16 bits */
         sum = (sum >> CHECKSUM_SHIFT) + (sum & CHECKSUM_MASK);
         sum += (sum >> CHECKSUM_SHIFT);
 
-        /* Final inversion */
         result = ~sum;
 
         return result;
