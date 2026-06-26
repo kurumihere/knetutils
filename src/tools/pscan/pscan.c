@@ -262,6 +262,9 @@ pscan_run(const pscan_config_t *config)
         double burst = 10.0;
         uint16_t port;
         uint64_t start_wait;
+        uint32_t num_ports;
+        uint16_t *port_list;
+        uint32_t i;
 
         init_pscan_state(config, &st);
 
@@ -308,9 +311,29 @@ pscan_run(const pscan_config_t *config)
         log_info("Scanning %s ports %u to %u (rate: %u pps)...", st.target_str,
                  config->start_port, config->end_port, config->rate_limit);
 
+        num_ports = config->end_port - config->start_port + 1;
+        port_list = malloc(num_ports * sizeof(uint16_t));
+        if (!port_list)
+                die("Out of memory allocating port list");
+
+        for (i = 0; i < num_ports; i++) {
+                port_list[i] = config->start_port + i;
+        }
+
+        if (config->randomize) {
+                srand((unsigned int)get_time_ns());
+                for (i = num_ports - 1; i > 0; i--) {
+                        uint32_t j = rand() % (i + 1);
+                        uint16_t temp = port_list[i];
+                        port_list[i] = port_list[j];
+                        port_list[j] = temp;
+                }
+        }
+
         last_time = get_time_ns();
 
-        for (port = config->start_port; port <= config->end_port; port++) {
+        for (i = 0; i < num_ports; i++) {
+                port = port_list[i];
                 if (config->rate_limit > 0) {
                         while (tokens < 1.0) {
                                 uint64_t now = get_time_ns();
@@ -360,6 +383,7 @@ pscan_run(const pscan_config_t *config)
                 }
         }
 
+        free(port_list);
         net_close_raw_socket(st.sock);
         if (st.send_fd >= 0) {
                 close(st.send_fd);

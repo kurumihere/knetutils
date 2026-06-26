@@ -11,6 +11,7 @@ static const cli_option_t pscan_options[] = {
     {'4', NULL, "use IPv4"},
     {'6', NULL, "use IPv6"},
     {'p', "ports", "port range to scan (e.g. 1-1024 or 80)"},
+    {'R', NULL, "randomize port scanning order"},
     {'r', "rate", "max packets per second (rate limit)"},
     {'u', NULL, "use UDP scan instead of TCP SYN"},
     {'W', "timeout", "time to wait for a response, in seconds"},
@@ -41,10 +42,13 @@ pscan_cli_main(int argc, char **argv)
         int opt;
         const char *target_ip_str;
 
-        while ((opt = getopt(argc, argv, "46p:r:W:I:uh")) != -1) {
+        while ((opt = getopt(argc, argv, "46p:r:W:I:Ruh")) != -1) {
                 switch (opt) {
                 case 'u':
                         config.udp = true;
+                        break;
+                case 'R':
+                        config.randomize = true;
                         break;
                 case '4':
                         config.family = AF_INET;

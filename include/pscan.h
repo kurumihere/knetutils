@@ -15,6 +15,7 @@ typedef struct {
         const char *bind_iface;
         uint32_t rate_limit;
         bool udp;
+        bool randomize;
 } pscan_config_t;
 
 int pscan_run(const pscan_config_t *config);
