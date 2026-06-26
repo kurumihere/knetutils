@@ -32,9 +32,10 @@ int
 sniff_cli_main(int argc, char *argv[])
 {
         sniff_config_t config;
+        int opt;
+
         memset(&config, 0, sizeof(config));
 
-        int opt;
         while ((opt = getopt(argc, argv, "I:c:vh")) != -1) {
                 switch (opt) {
                 case 'I':

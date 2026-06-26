@@ -44,16 +44,20 @@ static bool
 is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                 uint16_t expected_seq, bool use_udp, uint16_t expected_port)
 {
+        struct ip *ip_hdr;
+        int hlen;
+        struct icmp *icp;
+
         if (len < (ssize_t)sizeof(struct ip))
                 return false;
 
-        struct ip *ip_hdr = (struct ip *)buf;
-        int hlen = ip_hdr->ip_hl << 2;
+        ip_hdr = (struct ip *)buf;
+        hlen = ip_hdr->ip_hl << 2;
 
         if (len < (ssize_t)(hlen + sizeof(struct icmp)))
                 return false;
 
-        struct icmp *icp = (struct icmp *)(buf + hlen);
+        icp = (struct icmp *)(buf + hlen);
 
         if (!use_udp && icp->icmp_type == ICMP_ECHOREPLY) {
                 return icp->icmp_id == expected_id &&
@@ -61,22 +65,27 @@ is_our_probe_v4(const uint8_t *buf, ssize_t len, uint16_t expected_id,
         }
 
         if (icp->icmp_type == ICMP_TIMXCEED || icp->icmp_type == ICMP_UNREACH) {
+                struct ip *inner_ip;
+                int inner_hlen;
+
                 if (len < (ssize_t)(hlen + 8 + sizeof(struct ip)))
                         return false;
 
-                struct ip *inner_ip = (struct ip *)icp->icmp_data;
-                int inner_hlen = inner_ip->ip_hl << 2;
+                inner_ip = (struct ip *)icp->icmp_data;
+                inner_hlen = inner_ip->ip_hl << 2;
 
                 if (use_udp) {
+                        struct udphdr *inner_udp;
                         if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
                                 return false;
-                        struct udphdr *inner_udp =
+                        inner_udp =
                             (struct udphdr *)((uint8_t *)inner_ip + inner_hlen);
                         return ntohs(inner_udp->uh_dport) == expected_port;
                 } else {
+                        struct icmp *inner_icp;
                         if (len < (ssize_t)(hlen + 8 + inner_hlen + 8))
                                 return false;
-                        struct icmp *inner_icp =
+                        inner_icp =
                             (struct icmp *)((uint8_t *)inner_ip + inner_hlen);
                         return inner_icp->icmp_id == expected_id &&
                                inner_icp->icmp_seq == expected_seq;
@@ -90,10 +99,12 @@ static bool
 is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
                 uint16_t expected_seq, bool use_udp, uint16_t expected_port)
 {
+        struct icmp6_hdr *icp;
+
         if (len < (ssize_t)sizeof(struct icmp6_hdr))
                 return false;
 
-        struct icmp6_hdr *icp = (struct icmp6_hdr *)buf;
+        icp = (struct icmp6_hdr *)buf;
 
         if (!use_udp && icp->icmp6_type == ICMP6_ECHO_REPLY) {
                 return icp->icmp6_id == expected_id &&
@@ -102,11 +113,13 @@ is_our_probe_v6(const uint8_t *buf, ssize_t len, uint16_t expected_id,
 
         if (icp->icmp6_type == ICMP6_TIME_EXCEEDED ||
             icp->icmp6_type == ICMP6_DST_UNREACH) {
+                struct ip6_hdr *inner_ip;
+
                 if (len < (ssize_t)(sizeof(struct icmp6_hdr) +
                                     sizeof(struct ip6_hdr) + 8))
                         return false;
 
-                struct ip6_hdr *inner_ip = (struct ip6_hdr *)(icp + 1);
+                inner_ip = (struct ip6_hdr *)(icp + 1);
 
                 if (use_udp) {
                         struct udphdr *inner_udp =
@@ -196,15 +209,22 @@ static bool
 send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                       uint8_t ttl, uint16_t dest_port)
 {
-        int level = (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
-        int optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
-        int ttl_val = ttl;
+        int level;
+        int optname;
+        int ttl_val;
+
+        level = (config->family == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP;
+        optname = (config->family == AF_INET6) ? IPV6_UNICAST_HOPS : IP_TTL;
+        ttl_val = ttl;
 
         if (config->use_udp) {
+                struct sockaddr_storage target;
+                char dummy[1] = {0};
+
                 setsockopt(st->udp_sock, level, optname, &ttl_val,
                            sizeof(ttl_val));
 
-                struct sockaddr_storage target = config->target_addr;
+                target = config->target_addr;
                 if (config->family == AF_INET) {
                         ((struct sockaddr_in *)&target)->sin_port =
                             htons(dest_port);
@@ -213,7 +233,6 @@ send_traceroute_probe(const traceroute_config_t *config, traceroute_state_t *st,
                             htons(dest_port);
                 }
 
-                char dummy[1] = {0};
                 if (sendto(st->udp_sock, dummy, 0, 0,
                            (struct sockaddr *)&target,
                            config->target_addr_len) < 0) {
@@ -310,29 +329,37 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                       uint16_t dest_port)
 {
         struct pollfd pfd;
+
         pfd.fd = net_get_fd(st->sock);
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
-                int64_t timeout_ns = wait_until - get_time_ns();
-                if (timeout_ns <= 0)
-                        break;
-
-                int timeout_ms = timeout_ns / 1000000;
-                int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-                if (ret <= 0 || !(pfd.revents & POLLIN))
-                        continue;
-
+                int64_t timeout_ns;
+                int timeout_ms;
+                int ret;
                 __attribute__((aligned(8))) uint8_t recv_buf[4096];
                 struct sockaddr_storage src_addr;
                 socklen_t src_addr_len = sizeof(src_addr);
-                ssize_t n =
-                    net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
+                ssize_t n;
+                bool is_mine = false;
+                uint64_t recv_time;
+                uint64_t rtt;
+                char time_buf[64];
+
+                timeout_ns = wait_until - get_time_ns();
+                if (timeout_ns <= 0)
+                        break;
+
+                timeout_ms = timeout_ns / NS_PER_MS;
+                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+                if (ret <= 0 || !(pfd.revents & POLLIN))
+                        continue;
+
+                n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
                                          &src_addr, &src_addr_len);
                 if (n <= 0)
                         continue;
 
-                bool is_mine = false;
                 if (config->family == AF_INET) {
                         is_mine = is_our_probe_v4(recv_buf, n, htons(st->pid),
                                                   htons(st->seq),
@@ -346,12 +373,11 @@ recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
                 if (!is_mine)
                         continue;
 
-                uint64_t recv_time = get_time_ns();
-                uint64_t rtt = time_diff_ns(send_time, recv_time);
+                recv_time = get_time_ns();
+                rtt = time_diff_ns(send_time, recv_time);
 
                 print_hop_info(config, st, &src_addr, src_addr_len);
 
-                char time_buf[64];
                 format_time(rtt, NULL, time_buf, sizeof(time_buf));
                 printf("%s  ", time_buf);
                 fflush(stdout);
@@ -370,13 +396,17 @@ int
 traceroute_run(const traceroute_config_t *config)
 {
         struct sigaction sa;
+        traceroute_state_t st;
+        char target_str[INET6_ADDRSTRLEN];
+        uint8_t ttl;
+        uint8_t probe;
+
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
         sigaction(SIGTERM, &sa, NULL);
         sigaction(SIGQUIT, &sa, NULL);
 
-        traceroute_state_t st;
         init_traceroute_state(config, &st);
         setup_traceroute_sockets(config, &st);
 
@@ -387,27 +417,29 @@ traceroute_run(const traceroute_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
-        char target_str[INET6_ADDRSTRLEN];
         getnameinfo((struct sockaddr *)&config->target_addr,
                     config->target_addr_len, target_str, sizeof(target_str),
                     NULL, 0, NI_NUMERICHOST);
 
         printf("traceroute to %s, %u hops max\n", target_str, config->max_ttl);
 
-        for (uint8_t ttl = config->first_ttl;
+        for (ttl = config->first_ttl;
              ttl <= config->max_ttl && keep_running && !st.target_reached;
              ttl++) {
+                uint16_t dest_port;
+                uint64_t send_time;
+                uint64_t wait_until;
+                bool got_reply;
 
                 printf("%2u  ", ttl);
                 fflush(stdout);
 
                 memset(&st.last_hop_addr, 0, sizeof(st.last_hop_addr));
 
-                for (uint8_t probe = 0; probe < config->queries && keep_running;
+                for (probe = 0; probe < config->queries && keep_running;
                      probe++) {
-                        uint16_t dest_port =
-                            33434 + (ttl - 1) * config->queries + probe;
-                        uint64_t send_time = get_time_ns();
+                        dest_port = 33434 + (ttl - 1) * config->queries + probe;
+                        send_time = get_time_ns();
 
                         if (!send_traceroute_probe(config, &st, ttl,
                                                    dest_port)) {
@@ -417,8 +449,8 @@ traceroute_run(const traceroute_config_t *config)
                                 continue;
                         }
 
-                        uint64_t wait_until = send_time + config->timeout_ns;
-                        bool got_reply = recv_traceroute_reply(
+                        wait_until = send_time + config->timeout_ns;
+                        got_reply = recv_traceroute_reply(
                             config, &st, wait_until, send_time, dest_port);
 
                         if (!got_reply) {

@@ -41,14 +41,16 @@ int
 arping_cli_main(int argc, char *argv[])
 {
         arping_config_t config;
+        const char *source_ip_str = NULL;
+        int opt;
+        const char *target_ip_str;
+
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
-        config.timeout_ns = 1000000000ULL;
-        config.interval_ns = 1000000000ULL;
+        config.timeout_ns = NS_PER_S;
+        config.interval_ns = NS_PER_S;
 
-        const char *source_ip_str = NULL;
-        int opt;
         while ((opt = getopt(argc, argv, "I:c:w:i:S:qUdGCfAbu:h")) != -1) {
                 switch (opt) {
                 case 'I':
@@ -58,11 +60,10 @@ arping_cli_main(int argc, char *argv[])
                         config.count = (uint32_t)atoi(optarg);
                         break;
                 case 'w':
-                        config.timeout_ns = (uint64_t)atoi(optarg) * 1000000ULL;
+                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'i':
-                        config.interval_ns =
-                            (uint64_t)atoi(optarg) * 1000000ULL;
+                        config.interval_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'S':
                         source_ip_str = optarg;
@@ -142,7 +143,7 @@ arping_cli_main(int argc, char *argv[])
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                 }
-                const char *target_ip_str = argv[optind];
+                target_ip_str = argv[optind];
                 if (!net_resolve_ipv4(target_ip_str, &config.target_ip)) {
                         die("Invalid target IP address or hostname: %s",
                             target_ip_str);

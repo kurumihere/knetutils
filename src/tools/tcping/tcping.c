@@ -129,6 +129,10 @@ static void
 send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
 {
         struct tcphdr tcph;
+        uint64_t csum_buf_aligned[128];
+        uint8_t *csum_buf = (uint8_t *)csum_buf_aligned;
+        size_t csum_len = 0;
+
         memset(&tcph, 0, sizeof(tcph));
         tcph.th_sport = htons(st->sport);
         tcph.th_dport = htons(config->port);
@@ -139,10 +143,6 @@ send_tcping_probe(const tcping_config_t *config, tcping_state_t *st)
         tcph.th_win = htons(64240);
         tcph.th_sum = 0;
         tcph.th_urp = 0;
-
-        uint64_t csum_buf_aligned[128];
-        uint8_t *csum_buf = (uint8_t *)csum_buf_aligned;
-        size_t csum_len = 0;
 
         if (config->family == AF_INET) {
                 struct ipv4_pseudo_header psh;
@@ -211,25 +211,32 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
-                int64_t timeout_ns = wait_until - get_time_ns();
-                if (timeout_ns <= 0)
-                        break;
-                int timeout_ms = timeout_ns / 1000000;
-
-                int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-                if (ret <= 0 || !(pfd.revents & POLLIN))
-                        continue;
-
+                int64_t timeout_ns;
+                int timeout_ms;
+                int ret;
                 __attribute__((aligned(8))) uint8_t recv_buf[4096];
                 struct sockaddr_storage from_addr;
                 socklen_t from_addr_len = sizeof(from_addr);
-                ssize_t n =
-                    net_recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
+                ssize_t n;
+                int hlen = 0;
+                struct tcphdr *r_tcph;
+                uint64_t recv_time;
+                uint64_t rtt;
+
+                timeout_ns = wait_until - get_time_ns();
+                if (timeout_ns <= 0)
+                        break;
+                timeout_ms = timeout_ns / NS_PER_MS;
+
+                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+                if (ret <= 0 || !(pfd.revents & POLLIN))
+                        continue;
+
+                n = net_recv_ip_raw(st->sock, recv_buf, sizeof(recv_buf),
                                     &from_addr, &from_addr_len);
                 if (n <= 0)
                         continue;
 
-                int hlen = 0;
                 if (config->family == AF_INET) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
                         hlen = ip_hdr->ip_hl << 2;
@@ -238,7 +245,7 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
                 if (n < (ssize_t)(hlen + sizeof(struct tcphdr)))
                         continue;
 
-                struct tcphdr *r_tcph = (struct tcphdr *)(recv_buf + hlen);
+                r_tcph = (struct tcphdr *)(recv_buf + hlen);
 
                 if (r_tcph->th_dport != htons(st->sport) ||
                     r_tcph->th_sport != htons(config->port)) {
@@ -247,14 +254,14 @@ recv_tcping_reply(const tcping_config_t *config, tcping_state_t *st,
 
                 if ((r_tcph->th_flags & TH_SYN) &&
                     (r_tcph->th_flags & TH_ACK)) {
-                        uint64_t recv_time = get_time_ns();
-                        uint64_t rtt = time_diff_ns(send_time, recv_time);
+                        recv_time = get_time_ns();
+                        rtt = time_diff_ns(send_time, recv_time);
                         print_tcping_reply(config, st, r_tcph, rtt);
                         st->received++;
                         return true;
                 } else if (r_tcph->th_flags & TH_RST) {
-                        uint64_t recv_time = get_time_ns();
-                        uint64_t rtt = time_diff_ns(send_time, recv_time);
+                        recv_time = get_time_ns();
+                        rtt = time_diff_ns(send_time, recv_time);
                         print_tcping_reply(config, st, r_tcph, rtt);
                         st->received++;
                         return true;
@@ -282,13 +289,14 @@ int
 tcping_run(const tcping_config_t *config)
 {
         struct sigaction sa;
+        tcping_state_t st;
+
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
         sigaction(SIGTERM, &sa, NULL);
         sigaction(SIGQUIT, &sa, NULL);
 
-        tcping_state_t st;
         init_tcping_state(config, &st);
         setup_tcping_socket(config, &st);
 
@@ -304,16 +312,19 @@ tcping_run(const tcping_config_t *config)
         }
 
         while (keep_running) {
+                uint64_t send_time;
+                uint64_t wait_until;
+                bool replied;
+
                 if (config->count > 0 && st.sent >= config->count) {
                         break;
                 }
 
                 send_tcping_probe(config, &st);
-                uint64_t send_time = get_time_ns();
-                uint64_t wait_until = send_time + config->timeout_ns;
+                send_time = get_time_ns();
+                wait_until = send_time + config->timeout_ns;
 
-                bool replied =
-                    recv_tcping_reply(config, &st, wait_until, send_time);
+                replied = recv_tcping_reply(config, &st, wait_until, send_time);
 
                 if (!replied && !config->quiet) {
                         printf("Timeout waiting for reply from %s:%u\n",
@@ -336,5 +347,5 @@ tcping_run(const tcping_config_t *config)
         net_close_raw_socket(st.sock);
         print_tcping_stats(config, &st);
 
-        return (st.received > 0) ? 0 : 1;
+        return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

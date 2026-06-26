@@ -34,14 +34,16 @@ int
 tcping_cli_main(int argc, char *argv[])
 {
         tcping_config_t config;
+        int opt;
+        const char *target_ip_str;
+
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
-        config.timeout_ns = 1000000000ULL;
-        config.interval_ns = 1000000000ULL;
+        config.timeout_ns = NS_PER_S;
+        config.interval_ns = NS_PER_S;
         config.family = AF_UNSPEC;
 
-        int opt;
         while ((opt = getopt(argc, argv, "46c:W:i:I:qh")) != -1) {
                 switch (opt) {
                 case '4':
@@ -54,12 +56,10 @@ tcping_cli_main(int argc, char *argv[])
                         config.count = (uint32_t)atoi(optarg);
                         break;
                 case 'W':
-                        config.timeout_ns =
-                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'i':
-                        config.interval_ns =
-                            (uint64_t)atoi(optarg) * 1000000ULL;
+                        config.interval_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'I':
                         config.bind_iface = optarg;
@@ -88,7 +88,7 @@ tcping_cli_main(int argc, char *argv[])
                 return EXIT_FAILURE;
         }
 
-        const char *target_ip_str = argv[optind];
+        target_ip_str = argv[optind];
         config.port = (uint16_t)atoi(argv[optind + 1]);
 
         if (config.port == 0) {

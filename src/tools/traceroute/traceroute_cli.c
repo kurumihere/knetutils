@@ -36,16 +36,18 @@ int
 traceroute_cli_main(int argc, char *argv[])
 {
         traceroute_config_t config;
+        int opt;
+        const char *target_ip_str;
+
         memset(&config, 0, sizeof(config));
 
         config.first_ttl = 1;
         config.max_ttl = 30;
         config.queries = 3;
-        config.timeout_ns = 3000000000ULL;
+        config.timeout_ns = 3 * NS_PER_S;
         config.family = AF_UNSPEC;
         config.resolve_hostnames = true;
 
-        int opt;
         while ((opt = getopt(argc, argv, "46f:m:q:w:I:nUh")) != -1) {
                 switch (opt) {
                 case '4':
@@ -64,8 +66,7 @@ traceroute_cli_main(int argc, char *argv[])
                         config.queries = (uint8_t)atoi(optarg);
                         break;
                 case 'w':
-                        config.timeout_ns =
-                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'I':
                         config.bind_iface = optarg;
@@ -91,7 +92,7 @@ traceroute_cli_main(int argc, char *argv[])
                 return EXIT_FAILURE;
         }
 
-        const char *target_ip_str = argv[optind];
+        target_ip_str = argv[optind];
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);

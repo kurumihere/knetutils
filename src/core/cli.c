@@ -17,10 +17,12 @@ cli_print_help(const cli_app_t *app)
                 return;
         }
 
-        for (size_t i = 0; app->options[i].short_opt != '\0'; i++) {
+        size_t i;
+        for (i = 0; app->options[i].short_opt != '\0'; i++) {
                 const cli_option_t *opt = &app->options[i];
-
                 char opt_str[32];
+                const char *desc;
+
                 if (opt->arg_name) {
                         snprintf(opt_str, sizeof(opt_str), "-%c <%s>",
                                  opt->short_opt, opt->arg_name);
@@ -31,7 +33,7 @@ cli_print_help(const cli_app_t *app)
 
                 fprintf(stderr, "  %-14s  ", opt_str);
 
-                const char *desc = opt->description;
+                desc = opt->description;
                 while (*desc) {
                         if (*desc == '\n') {
                                 fprintf(stderr, "\n                  ");

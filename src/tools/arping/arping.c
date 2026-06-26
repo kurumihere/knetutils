@@ -73,13 +73,13 @@ setup_arping_socket(const arping_config_t *config, arping_state_t *st)
 static void
 init_arping_state(const arping_config_t *config, arping_state_t *st)
 {
+        uint8_t bc[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+        uint8_t zero[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
         memset(st, 0, sizeof(*st));
 
         st->target_in.s_addr = config->target_ip;
         st->source_in.s_addr = config->source_ip;
-
-        uint8_t bc[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-        uint8_t zero[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
         memcpy(st->target_mac_broadcast, bc, 6);
         memcpy(st->target_mac_zero, zero, 6);
@@ -169,12 +169,22 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
         pfd.events = POLLIN;
 
         while (get_time_ns() < expire && keep_running) {
-                int64_t timeout_ns = expire - get_time_ns();
+                int64_t timeout_ns;
+                int timeout_ms;
+                int ret;
+                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                ssize_t n;
+                struct ether_header *r_eth;
+                struct ether_arp *r_arp;
+                uint64_t recv_time;
+                uint64_t rtt;
+
+                timeout_ns = expire - get_time_ns();
                 if (timeout_ns <= 0)
                         break;
-                int timeout_ms = timeout_ns / 1000000;
+                timeout_ms = timeout_ns / NS_PER_MS;
 
-                int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
                 if (ret <= 0) {
                         break;
                 }
@@ -182,9 +192,7 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                 if (!(pfd.revents & POLLIN))
                         continue;
 
-                __attribute__((aligned(8))) uint8_t recv_buf[4096];
-                ssize_t n =
-                    net_recv_packet(st->sock, recv_buf, sizeof(recv_buf));
+                n = net_recv_packet(st->sock, recv_buf, sizeof(recv_buf));
                 if (n < 0)
                         continue;
 
@@ -193,20 +201,19 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
                         continue;
                 }
 
-                struct ether_header *r_eth = (struct ether_header *)recv_buf;
+                r_eth = (struct ether_header *)recv_buf;
                 if (ntohs(r_eth->ether_type) != ETH_P_ARP) {
                         continue;
                 }
 
-                struct ether_arp *r_arp =
-                    (struct ether_arp *)(recv_buf +
-                                         sizeof(struct ether_header));
+                r_arp = (struct ether_arp *)(recv_buf +
+                                             sizeof(struct ether_header));
                 if (ntohs(r_arp->arp_op) != ARPOP_REPLY) {
                         continue;
                 }
 
-                uint64_t recv_time = get_time_ns();
-                uint64_t rtt = time_diff_ns(send_time, recv_time);
+                recv_time = get_time_ns();
+                rtt = time_diff_ns(send_time, recv_time);
 
                 if (handle_arp_reply(config, st, r_arp, rtt)) {
                         if (config->dad || config->count == 1 ||
@@ -246,10 +253,12 @@ int
 arping_run(const arping_config_t *config)
 {
         arping_state_t st;
+        struct sigaction sa;
+
         init_arping_state(config, &st);
 
         if (setup_arping_socket(config, &st) < 0) {
-                return -1;
+                return EXIT_FAILURE;
         }
 
         if (setgid(getgid()) != 0) {
@@ -259,7 +268,6 @@ arping_run(const arping_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
-        struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
@@ -271,11 +279,10 @@ arping_run(const arping_config_t *config)
                         char tgt_str[INET_ADDRSTRLEN];
                         inet_ntop(AF_INET, &st.target_in, tgt_str,
                                   sizeof(tgt_str));
-                        printf(
-                            "Sending %u, 28-byte ARP Requests to %s, "
-                            "timeout is %u seconds:\n",
-                            config->count, tgt_str,
-                            (unsigned int)(config->timeout_ns / 1000000000ULL));
+                        printf("Sending %u, 28-byte ARP Requests to %s, "
+                               "timeout is %u seconds:\n",
+                               config->count, tgt_str,
+                               (unsigned int)(config->timeout_ns / NS_PER_S));
                 } else {
                         char tgt_str[INET_ADDRSTRLEN], src_str[INET_ADDRSTRLEN];
                         inet_ntop(AF_INET, &st.target_in, tgt_str,
@@ -289,15 +296,18 @@ arping_run(const arping_config_t *config)
 
         while (keep_running &&
                (config->count == 0 || st.sent < config->count)) {
-                uint64_t send_time = get_time_ns();
+                uint64_t send_time;
+                uint64_t expire;
+                bool got_reply;
+
+                send_time = get_time_ns();
 
                 if (!send_arping_probe(config, &st)) {
                         break;
                 }
 
-                uint64_t expire = send_time + config->timeout_ns;
-                bool got_reply =
-                    recv_arping_reply(config, &st, expire, send_time);
+                expire = send_time + config->timeout_ns;
+                got_reply = recv_arping_reply(config, &st, expire, send_time);
 
                 if (!keep_running)
                         break;
@@ -326,7 +336,7 @@ arping_run(const arping_config_t *config)
         net_close_raw_socket(st.sock);
 
         if (config->dad) {
-                return (st.received > 0) ? 1 : 0;
+                return (st.received > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
         }
-        return (st.received > 0) ? 0 : 1;
+        return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

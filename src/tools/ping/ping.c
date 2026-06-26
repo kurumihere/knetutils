@@ -76,12 +76,14 @@ integer_sqrt(uint64_t n)
 static void
 update_ping_stats(ping_state_t *st, uint64_t rtt)
 {
+        uint64_t rtt_us;
+
         if (st->rtt_min == 0 || rtt < st->rtt_min)
                 st->rtt_min = rtt;
         if (rtt > st->rtt_max)
                 st->rtt_max = rtt;
         st->rtt_sum += rtt;
-        uint64_t rtt_us = rtt / 1000;
+        rtt_us = rtt / 1000;
         st->rtt_sum_us += rtt_us;
         st->rtt_sum_squares_us += rtt_us * rtt_us;
         st->rtt_last = rtt;
@@ -91,6 +93,8 @@ static void
 print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
                  const char *src_str, uint16_t r_seq, int ttl)
 {
+        char time_buf[64] = "N/A";
+
         if (config->quiet)
                 return;
 
@@ -99,8 +103,6 @@ print_ping_reply(const ping_config_t *config, uint64_t rtt, ssize_t n, int hlen,
                 fflush(stdout);
                 return;
         }
-
-        char time_buf[64] = "N/A";
         if (config->payload_size >= 8) {
                 format_time(rtt, config->time_unit, time_buf, sizeof(time_buf));
         }
@@ -119,26 +121,28 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
 {
         if (config->family == AF_INET) {
                 struct icmp *icp = (struct icmp *)st->packet;
+                uint64_t *ts;
+
                 icp->icmp_type = st->icmp_req_type;
                 icp->icmp_code = 0;
                 icp->icmp_id = htons(st->pid);
                 icp->icmp_seq = htons(st->seq);
                 if (config->payload_size >= 8) {
-                        uint64_t *ts =
-                            (uint64_t *)(st->packet + st->header_size);
+                        ts = (uint64_t *)(st->packet + st->header_size);
                         *ts = get_time_ns();
                 }
                 icp->icmp_cksum = 0;
                 icp->icmp_cksum = net_checksum(st->packet, st->total_len);
         } else {
                 struct icmp6_hdr *icp = (struct icmp6_hdr *)st->packet;
+                uint64_t *ts;
+
                 icp->icmp6_type = st->icmp_req_type;
                 icp->icmp6_code = 0;
                 icp->icmp6_id = htons(st->pid);
                 icp->icmp6_seq = htons(st->seq);
                 if (config->payload_size >= 8) {
-                        uint64_t *ts =
-                            (uint64_t *)(st->packet + st->header_size);
+                        ts = (uint64_t *)(st->packet + st->header_size);
                         *ts = get_time_ns();
                 }
                 icp->icmp6_cksum = 0;
@@ -166,28 +170,37 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
         pfd.events = POLLIN;
 
         while (get_time_ns() < wait_until && keep_running) {
-                int64_t timeout_ns = wait_until - get_time_ns();
+                int64_t timeout_ns;
+                int timeout_ms;
+                int ret;
+                __attribute__((aligned(8))) uint8_t recv_buf[4096];
+                struct sockaddr_storage src_addr;
+                socklen_t src_addr_len = sizeof(src_addr);
+                ssize_t n;
+                int hlen = 0;
+                int ttl = -1;
+                uint16_t r_id, r_seq;
+                int r_type;
+                uint64_t recv_time;
+                uint64_t rtt = 0;
+                char src_str[INET6_ADDRSTRLEN];
+
+                timeout_ns = wait_until - get_time_ns();
                 if (timeout_ns <= 0)
                         break;
 
-                int timeout_ms = timeout_ns / 1000000;
-                int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+                timeout_ms = timeout_ns / NS_PER_MS;
+                ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
                 if (ret < 0)
                         break;
                 if (ret <= 0 || !(pfd.revents & POLLIN))
                         continue;
 
-                __attribute__((aligned(8))) uint8_t recv_buf[4096];
-                struct sockaddr_storage src_addr;
-                socklen_t src_addr_len = sizeof(src_addr);
-                ssize_t n =
-                    net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
+                n = net_recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf),
                                          &src_addr, &src_addr_len);
                 if (n <= 0)
                         continue;
 
-                int hlen = 0;
-                int ttl = -1;
                 if (config->family == AF_INET && !st->is_dgram) {
                         struct ip *ip_hdr = (struct ip *)recv_buf;
                         hlen = ip_hdr->ip_hl << 2;
@@ -197,8 +210,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (n < (ssize_t)(hlen + st->header_size))
                         continue;
 
-                uint16_t r_id, r_seq;
-                int r_type;
                 if (config->family == AF_INET) {
                         struct icmp *r_icp = (struct icmp *)(recv_buf + hlen);
                         r_type = r_icp->icmp_type;
@@ -219,8 +230,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                 if (!config->flood && r_seq != htons(st->seq))
                         continue;
 
-                uint64_t recv_time = get_time_ns();
-                uint64_t rtt = 0;
+                recv_time = get_time_ns();
                 if (recv_time >= send_time)
                         rtt = time_diff_ns(send_time, recv_time);
 
@@ -237,7 +247,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                         fflush(stdout);
                 }
 
-                char src_str[INET6_ADDRSTRLEN];
                 getnameinfo((struct sockaddr *)&src_addr, src_addr_len, src_str,
                             sizeof(src_str), NULL, 0, NI_NUMERICHOST);
 
@@ -281,16 +290,18 @@ print_statistics(const ping_config_t *config, const ping_state_t *st)
 
         if (st->received > 0 && config->payload_size >= 8) {
                 char min_buf[64], avg_buf[64], max_buf[64], mdev_buf[64];
+                uint64_t avg_us, variance_us, mdev_ns;
+
                 format_time(st->rtt_min, config->time_unit, min_buf,
                             sizeof(min_buf));
                 format_time(st->rtt_sum / st->received, config->time_unit,
                             avg_buf, sizeof(avg_buf));
                 format_time(st->rtt_max, config->time_unit, max_buf,
                             sizeof(max_buf));
-                uint64_t avg_us = st->rtt_sum_us / st->received;
-                uint64_t variance_us =
+                avg_us = st->rtt_sum_us / st->received;
+                variance_us =
                     (st->rtt_sum_squares_us / st->received) - (avg_us * avg_us);
-                uint64_t mdev_ns = integer_sqrt(variance_us) * 1000;
+                mdev_ns = integer_sqrt(variance_us) * 1000;
                 format_time(mdev_ns, config->time_unit, mdev_buf,
                             sizeof(mdev_buf));
                 printf("rtt min/avg/max/mdev = %s/%s/%s/%s\n", min_buf, avg_buf,
@@ -324,7 +335,8 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
 
         if (config->pattern_len > 0) {
                 uint8_t *payload = st->packet + st->header_size;
-                for (size_t i = 0; i < config->payload_size; i++) {
+                size_t i;
+                for (i = 0; i < config->payload_size; i++) {
                         payload[i] = config->pattern[i % config->pattern_len];
                 }
         }
@@ -389,13 +401,16 @@ int
 ping_run(const ping_config_t *config)
 {
         struct sigaction sa;
+        net_socket_t *sock;
+        ping_state_t st;
+
         memset(&sa, 0, sizeof(sa));
         sa.sa_handler = handle_sigint;
         sigaction(SIGINT, &sa, NULL);
         sigaction(SIGTERM, &sa, NULL);
         sigaction(SIGQUIT, &sa, NULL);
 
-        net_socket_t *sock = net_open_icmp_socket(config->family);
+        sock = net_open_icmp_socket(config->family);
         if (!sock) {
                 die("Failed to open ICMP socket. Are you root?");
         }
@@ -409,25 +424,24 @@ ping_run(const ping_config_t *config)
                 log_warn("Failed to drop user privileges");
         }
 
-        ping_state_t st;
         init_ping_state(config, &st);
         st.sock = sock;
         st.is_dgram = net_is_dgram(sock);
 
         if (!config->quiet) {
                 if (config->cisco_style) {
-                        printf(
-                            "Sending %u, %u-byte ICMP Echos to %s, timeout "
-                            "is %u seconds:\n",
-                            config->count, config->payload_size, st.target_str,
-                            (unsigned int)(config->timeout_ns / 1000000000ULL));
+                        printf("Sending %u, %u-byte ICMP Echos to %s, timeout "
+                               "is %u seconds:\n",
+                               config->count, config->payload_size,
+                               st.target_str,
+                               (unsigned int)(config->timeout_ns / NS_PER_S));
                 } else {
                         printf("PING %s: %u data bytes\n", st.target_str,
                                config->payload_size);
                         if (config->pattern_len > 0) {
+                                size_t i;
                                 printf("PATTERN: 0x");
-                                for (size_t i = 0; i < config->pattern_len;
-                                     i++) {
+                                for (i = 0; i < config->pattern_len; i++) {
                                         printf("%02x", config->pattern[i]);
                                 }
                                 printf("\n");
@@ -436,7 +450,12 @@ ping_run(const ping_config_t *config)
         }
 
         while (keep_running) {
-                uint64_t now = get_time_ns();
+                uint64_t now;
+                uint64_t send_time;
+                uint64_t wait_until;
+                bool replied;
+
+                now = get_time_ns();
                 if (config->deadline_ns > 0 &&
                     now - st.start_time >= config->deadline_ns) {
                         break;
@@ -447,11 +466,10 @@ ping_run(const ping_config_t *config)
                 }
 
                 send_ping_request(config, &st);
-                uint64_t send_time = get_time_ns();
+                send_time = get_time_ns();
 
-                uint64_t wait_until = config->flood
-                                          ? send_time + config->interval_ns
-                                          : send_time + config->timeout_ns;
+                wait_until = config->flood ? send_time + config->interval_ns
+                                           : send_time + config->timeout_ns;
                 if (config->deadline_ns > 0) {
                         uint64_t deadline_end =
                             st.start_time + config->deadline_ns;
@@ -460,8 +478,7 @@ ping_run(const ping_config_t *config)
                         }
                 }
 
-                bool replied =
-                    recv_ping_reply(config, &st, wait_until, send_time);
+                replied = recv_ping_reply(config, &st, wait_until, send_time);
 
                 if (!keep_running)
                         break;
@@ -491,8 +508,8 @@ ping_run(const ping_config_t *config)
                                 uint64_t adaptive_interval =
                                     st.rtt_last > 0 ? st.rtt_last
                                                     : config->interval_ns;
-                                if (adaptive_interval < 2000000ULL) {
-                                        adaptive_interval = 2000000ULL;
+                                if (adaptive_interval < 2 * NS_PER_MS) {
+                                        adaptive_interval = 2 * NS_PER_MS;
                                 }
                                 next_send_time = send_time + adaptive_interval;
                         }
@@ -508,5 +525,5 @@ ping_run(const ping_config_t *config)
         net_close_raw_socket(sock);
         free(st.packet);
 
-        return (st.received > 0) ? 0 : 1;
+        return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

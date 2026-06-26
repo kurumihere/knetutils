@@ -42,17 +42,19 @@ int
 ping_cli_main(int argc, char *argv[])
 {
         ping_config_t config;
+        int opt;
+        const char *target_ip_str;
+
         memset(&config, 0, sizeof(config));
 
         config.count = 0;
-        config.timeout_ns = 1000000000ULL;
-        config.interval_ns = 1000000000ULL;
+        config.timeout_ns = NS_PER_S;
+        config.interval_ns = NS_PER_S;
         config.payload_size = 56;
         config.ttl = 0;
 
         config.family = AF_UNSPEC;
 
-        int opt;
         while ((opt = getopt(argc, argv, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) !=
                -1) {
                 switch (opt) {
@@ -73,7 +75,7 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'f':
                         config.flood = true;
-                        config.interval_ns = 10000000ULL;
+                        config.interval_ns = 10 * NS_PER_MS;
                         break;
                 case 'I':
                         config.bind_iface = optarg;
@@ -82,16 +84,13 @@ ping_cli_main(int argc, char *argv[])
                         config.count = (uint32_t)atoi(optarg);
                         break;
                 case 'w':
-                        config.deadline_ns =
-                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        config.deadline_ns = (uint64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'W':
-                        config.timeout_ns =
-                            (uint64_t)atoi(optarg) * 1000000000ULL;
+                        config.timeout_ns = (uint64_t)atoi(optarg) * NS_PER_S;
                         break;
                 case 'i':
-                        config.interval_ns =
-                            (uint64_t)atoi(optarg) * 1000000ULL;
+                        config.interval_ns = (uint64_t)atoi(optarg) * NS_PER_MS;
                         break;
                 case 'u':
                         config.time_unit = optarg;
@@ -101,10 +100,11 @@ ping_cli_main(int argc, char *argv[])
                         break;
                 case 'p': {
                         size_t len = strlen(optarg);
+                        size_t i;
                         if (len > 32)
                                 len = 32;
                         config.pattern_len = len / 2;
-                        for (size_t i = 0; i < config.pattern_len; i++) {
+                        for (i = 0; i < config.pattern_len; i++) {
                                 unsigned int byte;
                                 sscanf(optarg + i * 2, "%2x", &byte);
                                 config.pattern[i] = (uint8_t)byte;
@@ -136,7 +136,7 @@ ping_cli_main(int argc, char *argv[])
                 return EXIT_FAILURE;
         }
 
-        const char *target_ip_str = argv[optind];
+        target_ip_str = argv[optind];
         if (!net_resolve_host(target_ip_str, config.family, &config.target_addr,
                               &config.target_addr_len)) {
                 die("Invalid target IP address or hostname: %s", target_ip_str);
