@@ -1,6 +1,6 @@
 # knetutils
 
-A small collection of standard network utilities written in C. It provides basic tools for network diagnostics and packet manipulation, working consistently across Linux and macOS/BSD without relying on external dependencies.
+The collection of standard network utilities written in C. It provides basic tools for network diagnostics and packet manipulation, working consistently across Linux and macOS/BSD without relying on external dependencies.
 
 ## Tools
 
@@ -29,4 +29,4 @@ sudo ./bin/knetutils pscan -p 80-443 example.com
 sudo ./bin/knetutils tcping 1.1.1.1 443
 ```
 
-> *(Note: Raw socket operations usually require root privileges)*
+> Note: Raw socket operations usually require root privileges
