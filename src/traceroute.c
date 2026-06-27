@@ -425,83 +425,14 @@ print_hop_info(const traceroute_config_t *config, traceroute_state_t *st,
     }
 }
 
-static bool
-recv_traceroute_reply(const traceroute_config_t *config, traceroute_state_t *st,
-                      u_int64_t wait_until, u_int64_t send_time,
-                      u_short dest_port)
-{
-    struct pollfd pfd;
-    bool ret_val = false;
-
-    pfd.fd = get_socket_fd(st->sock);
-    pfd.events = POLLIN;
-
-    while (get_time_ns() < wait_until && keep_running) {
-        int64_t timeout_ns;
-        int timeout_ms;
-        int ret;
-        __attribute__((aligned(8))) u_char recv_buf[RECV_BUF_SIZE];
-        struct sockaddr_storage src_addr;
-        socklen_t src_addr_len = sizeof(src_addr);
-        ssize_t n;
-        bool is_mine = false;
-        u_int64_t recv_time;
-        u_int64_t rtt;
-        char time_buf[64];
-
-        timeout_ns = wait_until - get_time_ns();
-        if (timeout_ns <= 0) {
-            break;
-        }
-
-        timeout_ms = timeout_ns / NS_PER_MS;
-        ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-
-        if (ret <= 0 || !(pfd.revents & POLLIN)) {
-            continue;
-        }
-
-        n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf), &src_addr,
-                             &src_addr_len);
-
-        if (n <= 0) {
-            continue;
-        }
-
-        if (config->family == AF_INET) {
-            is_mine =
-                is_our_probe_v4(recv_buf, n, htons(st->pid), htons(st->seq),
-                                config->use_udp, dest_port);
-        } else {
-            is_mine =
-                is_our_probe_v6(recv_buf, n, htons(st->pid), htons(st->seq),
-                                config->use_udp, dest_port);
-        }
-
-        if (!is_mine) {
-            continue;
-        }
-
-        recv_time = get_time_ns();
-        rtt = time_diff_ns(send_time, recv_time);
-
-        print_hop_info(config, st, &src_addr, src_addr_len);
-
-        format_time(rtt, NULL, time_buf, sizeof(time_buf));
-        printf("%s  ", time_buf);
-        fflush(stdout);
-
-        if (check_is_target(config, recv_buf, n)) {
-            st->target_reached = true;
-        }
-
-        ret_val = true;
-        goto out;
-    }
-
-out:
-    return ret_val;
-}
+typedef struct {
+    u_int64_t send_time;
+    u_int64_t recv_time;
+    struct sockaddr_storage src_addr;
+    socklen_t src_addr_len;
+    bool received;
+    bool sent_ok;
+} probe_state_t;
 
 static int
 traceroute_run(const traceroute_config_t *config)
@@ -511,6 +442,7 @@ traceroute_run(const traceroute_config_t *config)
     char target_str[INET6_ADDRSTRLEN];
     u_char ttl;
     u_char probe;
+    probe_state_t probes[256];
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_sigint;
@@ -536,42 +468,122 @@ traceroute_run(const traceroute_config_t *config)
 
     for (ttl = config->first_ttl;
          ttl <= config->max_ttl && keep_running && !st.target_reached; ttl++) {
-        u_short dest_port;
-        u_int64_t send_time;
-        u_int64_t wait_until;
-        bool got_reply;
+        u_int64_t global_wait_until = 0;
+        u_short base_seq = st.seq;
+        struct pollfd pfd;
 
         printf("%2u  ", ttl);
         fflush(stdout);
 
         memset(&st.last_hop_addr, 0, sizeof(st.last_hop_addr));
+        memset(probes, 0, sizeof(probes));
 
         for (probe = 0; probe < config->queries && keep_running; probe++) {
+            u_short dest_port;
             dest_port =
                 TRACEROUTE_PORT_BASE + (ttl - 1) * config->queries + probe;
-            send_time = get_time_ns();
+            probes[probe].send_time = get_time_ns();
 
-            if (!send_traceroute_probe(config, &st, ttl, dest_port)) {
-                printf("* ");
-                fflush(stdout);
-                st.seq++;
-                continue;
+            if (send_traceroute_probe(config, &st, ttl, dest_port)) {
+                u_int64_t wait_until;
+                probes[probe].sent_ok = true;
+                wait_until = probes[probe].send_time + config->timeout_ns;
+                if (wait_until > global_wait_until) {
+                    global_wait_until = wait_until;
+                }
+            } else {
+                probes[probe].sent_ok = false;
             }
-
-            wait_until = send_time + config->timeout_ns;
-
-            got_reply = recv_traceroute_reply(config, &st, wait_until,
-                                              send_time, dest_port);
-
-            if (!got_reply) {
-                printf("* ");
-                fflush(stdout);
-            }
-
             st.seq++;
         }
 
+        pfd.fd = get_socket_fd(st.sock);
+        pfd.events = POLLIN;
+
+        while (keep_running && get_time_ns() < global_wait_until) {
+            bool all_done = true;
+            int64_t timeout_ns;
+            int timeout_ms;
+            int ret;
+            __attribute__((aligned(8))) u_char recv_buf[RECV_BUF_SIZE];
+            struct sockaddr_storage src_addr;
+            socklen_t src_addr_len = sizeof(src_addr);
+            ssize_t n;
+
+            for (probe = 0; probe < config->queries; probe++) {
+                if (probes[probe].sent_ok && !probes[probe].received) {
+                    all_done = false;
+                    break;
+                }
+            }
+            if (all_done) {
+                break;
+            }
+
+            timeout_ns = global_wait_until - get_time_ns();
+            if (timeout_ns <= 0)
+                break;
+
+            timeout_ms = timeout_ns / NS_PER_MS;
+            ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
+            if (ret <= 0 || !(pfd.revents & POLLIN)) {
+                continue;
+            }
+
+            n = recv_icmp_packet(st.sock, recv_buf, sizeof(recv_buf), &src_addr,
+                                 &src_addr_len);
+            if (n <= 0)
+                continue;
+
+            for (probe = 0; probe < config->queries; probe++) {
+                if (probes[probe].sent_ok && !probes[probe].received) {
+                    u_short expected_seq = base_seq + probe;
+                    u_short dest_port = TRACEROUTE_PORT_BASE +
+                                        (ttl - 1) * config->queries + probe;
+                    bool is_mine = false;
+
+                    if (config->family == AF_INET) {
+                        is_mine = is_our_probe_v4(recv_buf, n, htons(st.pid),
+                                                  htons(expected_seq),
+                                                  config->use_udp, dest_port);
+                    } else {
+                        is_mine = is_our_probe_v6(recv_buf, n, htons(st.pid),
+                                                  htons(expected_seq),
+                                                  config->use_udp, dest_port);
+                    }
+
+                    if (is_mine) {
+                        probes[probe].recv_time = get_time_ns();
+                        probes[probe].src_addr = src_addr;
+                        probes[probe].src_addr_len = src_addr_len;
+                        probes[probe].received = true;
+
+                        if (check_is_target(config, recv_buf, n)) {
+                            st.target_reached = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (probe = 0; probe < config->queries; probe++) {
+            if (probes[probe].sent_ok && probes[probe].received) {
+                char time_buf[64];
+                u_int64_t rtt;
+
+                print_hop_info(config, &st, &probes[probe].src_addr,
+                               probes[probe].src_addr_len);
+                rtt = time_diff_ns(probes[probe].send_time,
+                                   probes[probe].recv_time);
+                format_time(rtt, NULL, time_buf, sizeof(time_buf));
+                printf("%s  ", time_buf);
+            } else {
+                printf("* ");
+            }
+        }
         printf("\n");
+        fflush(stdout);
     }
 
     free(st.packet);

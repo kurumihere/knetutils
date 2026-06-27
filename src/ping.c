@@ -112,6 +112,10 @@ typedef struct {
     u_int total_len;
 
     char target_str[INET6_ADDRSTRLEN];
+
+    u_int64_t *sent_times;
+    bool *replied_or_timeout;
+    u_short next_timeout_check_seq;
 } ping_state_t;
 
 static u_int64_t
@@ -224,40 +228,28 @@ send_ping_request(const ping_config_t *config, ping_state_t *st)
     st->sent++;
 }
 
-static bool
-recv_ping_reply(const ping_config_t *config, ping_state_t *st,
-                u_int64_t wait_until, u_int64_t send_time)
+static void
+drain_ping_replies(const ping_config_t *config, ping_state_t *st)
 {
     struct pollfd pfd;
     pfd.fd = get_socket_fd(st->sock);
     pfd.events = POLLIN;
 
-    while (get_time_ns() < wait_until && keep_running) {
-        int64_t timeout_ns;
-        int timeout_ms;
-        int ret;
+    while (keep_running && poll(&pfd, 1, 0) > 0) {
         __attribute__((aligned(8))) u_char recv_buf[4096];
         struct sockaddr_storage src_addr;
         socklen_t src_addr_len = sizeof(src_addr);
         ssize_t n;
         int hlen = 0;
         int ttl = -1;
-        u_short r_id, r_seq;
+        u_short r_id, r_seq, seq;
         int r_type;
         u_int64_t recv_time;
         u_int64_t rtt = 0;
         char src_str[INET6_ADDRSTRLEN];
 
-        timeout_ns = wait_until - get_time_ns();
-        if (timeout_ns <= 0)
+        if (!(pfd.revents & POLLIN))
             break;
-
-        timeout_ms = timeout_ns / NS_PER_MS;
-        ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-        if (ret < 0)
-            break;
-        if (ret <= 0 || !(pfd.revents & POLLIN))
-            continue;
 
         n = recv_icmp_packet(st->sock, recv_buf, sizeof(recv_buf), &src_addr,
                              &src_addr_len);
@@ -274,7 +266,6 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
             continue;
 
         if (config->family == AF_INET) {
-
             struct icmp *r_icp = (struct icmp *)(recv_buf + hlen);
             r_type = r_icp->icmp_type;
             r_id = r_icp->icmp_id;
@@ -290,13 +281,21 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
             (!st->is_dgram && r_id != htons(st->pid)))
             continue;
 
-        if (!config->flood && r_seq != htons(st->seq))
+        seq = ntohs(r_seq);
+        if (st->replied_or_timeout[seq])
             continue;
 
         recv_time = get_time_ns();
-        if (recv_time >= send_time)
-            rtt = time_diff_ns(send_time, recv_time);
 
+        if (st->sent_times[seq] > 0 && recv_time >= st->sent_times[seq]) {
+            rtt = time_diff_ns(st->sent_times[seq], recv_time);
+        } else if (config->payload_size >= 8) {
+            u_int64_t *ts = (u_int64_t *)(recv_buf + hlen + st->header_size);
+            if (recv_time >= *ts)
+                rtt = time_diff_ns(*ts, recv_time);
+        }
+
+        st->replied_or_timeout[seq] = true;
         update_ping_stats(st, rtt);
         st->received++;
 
@@ -314,9 +313,7 @@ recv_ping_reply(const ping_config_t *config, ping_state_t *st,
                     sizeof(src_str), NULL, 0, NI_NUMERICHOST);
 
         print_ping_reply(config, rtt, n, hlen, src_str, r_seq, ttl);
-        return true;
     }
-    return false;
 }
 
 static void
@@ -390,6 +387,12 @@ init_ping_state(const ping_config_t *config, ping_state_t *st)
     st->packet = calloc(1, st->total_len);
     if (!st->packet)
         die("Memory allocation failed for packet");
+
+    st->sent_times = calloc(65536, sizeof(u_int64_t));
+    st->replied_or_timeout = calloc(65536, sizeof(bool));
+    if (!st->sent_times || !st->replied_or_timeout)
+        die("Memory allocation failed for state tracking");
+    st->next_timeout_check_seq = 1;
     if (config->pattern_len > 0) {
         u_char *payload = st->packet + st->header_size;
         size_t i;
@@ -450,6 +453,7 @@ ping_run(const ping_config_t *config)
     struct sigaction sa;
     net_socket_t *sock;
     ping_state_t st;
+    u_int64_t next_send_time;
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_sigint;
@@ -495,69 +499,98 @@ ping_run(const ping_config_t *config)
         }
     }
 
-    while (keep_running) {
-        u_int64_t now;
-        u_int64_t send_time;
-        u_int64_t wait_until;
-        bool replied;
+    next_send_time = get_time_ns();
 
-        now = get_time_ns();
+    while (keep_running) {
+        u_int64_t now = get_time_ns();
+        int timeout_ms = 1;
+        struct pollfd pfd;
+        int ret;
+
         if (config->deadline_ns > 0 &&
             now - st.start_time >= config->deadline_ns) {
             break;
         }
 
-        if (config->count > 0 && st.sent >= config->count) {
-            break;
-        }
+        if ((config->count == 0 || st.sent < config->count) &&
+            now >= next_send_time) {
+            st.sent_times[st.seq] = now;
+            st.replied_or_timeout[st.seq] = false;
+            send_ping_request(config, &st);
+            st.seq++;
 
-        send_ping_request(config, &st);
-        send_time = get_time_ns();
-
-        wait_until = config->flood ? send_time + config->interval_ns
-                                   : send_time + config->timeout_ns;
-        if (config->deadline_ns > 0) {
-            u_int64_t deadline_end = st.start_time + config->deadline_ns;
-            if (wait_until > deadline_end) {
-                wait_until = deadline_end;
-            }
-        }
-
-        replied = recv_ping_reply(config, &st, wait_until, send_time);
-
-        if (!keep_running)
-            break;
-
-        if (config->flood && config->count > 0 && st.received >= config->count)
-            break;
-
-        if (!replied && !config->quiet && !config->flood) {
-            if (config->cisco_style) {
-                printf(".");
-                fflush(stdout);
-            } else {
-                printf("Timeout waiting for reply\n");
-            }
-        }
-
-        st.seq++;
-
-        if (keep_running && (config->count == 0 || st.sent < config->count)) {
-            u_int64_t current = get_time_ns();
-            u_int64_t next_send_time = send_time + config->interval_ns;
-
-            if (config->adaptive) {
-                u_int64_t adaptive_interval =
-                    st.rtt_last > 0 ? st.rtt_last : config->interval_ns;
+            if (config->adaptive && st.rtt_last > 0) {
+                u_int64_t adaptive_interval = st.rtt_last;
                 if (adaptive_interval < 2 * NS_PER_MS) {
                     adaptive_interval = 2 * NS_PER_MS;
                 }
-                next_send_time = send_time + adaptive_interval;
+                next_send_time = now + adaptive_interval;
+            } else {
+                next_send_time = now + config->interval_ns;
             }
+        }
 
-            if (!config->flood && current < next_send_time) {
-                usleep((next_send_time - current) / 1000);
+        now = get_time_ns();
+        while (st.next_timeout_check_seq != st.seq) {
+            u_short chk_seq = st.next_timeout_check_seq;
+            if (st.replied_or_timeout[chk_seq]) {
+                st.next_timeout_check_seq++;
+                continue;
             }
+            if (now >= st.sent_times[chk_seq] + config->timeout_ns) {
+                st.replied_or_timeout[chk_seq] = true;
+                if (!config->quiet && !config->flood) {
+                    if (config->cisco_style) {
+                        printf(".");
+                        fflush(stdout);
+                    } else {
+                        printf("Timeout waiting for reply for seq %u\n",
+                               chk_seq);
+                    }
+                }
+                st.next_timeout_check_seq++;
+            } else {
+                break;
+            }
+        }
+
+        if (config->count > 0 && st.sent >= config->count &&
+            st.next_timeout_check_seq == st.seq) {
+            break;
+        }
+
+        if (config->count == 0 || st.sent < config->count) {
+            if (next_send_time > now) {
+                u_int64_t diff = next_send_time - now;
+                timeout_ms = diff / NS_PER_MS;
+                if (timeout_ms <= 0)
+                    timeout_ms = 1;
+            } else {
+                timeout_ms = 0;
+            }
+        } else {
+            if (st.next_timeout_check_seq != st.seq) {
+                u_int64_t to_wait = (st.sent_times[st.next_timeout_check_seq] +
+                                     config->timeout_ns) -
+                                    now;
+                timeout_ms = to_wait / NS_PER_MS;
+                if (timeout_ms <= 0)
+                    timeout_ms = 1;
+            }
+        }
+
+        if (config->deadline_ns > 0) {
+            u_int64_t d_diff = (st.start_time + config->deadline_ns) - now;
+            int d_ms = d_diff / NS_PER_MS;
+            if (d_ms < timeout_ms)
+                timeout_ms = d_ms;
+        }
+
+        pfd.fd = get_socket_fd(st.sock);
+        pfd.events = POLLIN;
+        ret = poll(&pfd, 1, timeout_ms);
+        if (ret > 0 && (pfd.revents & POLLIN)) {
+            drain_ping_replies(config, &st);
         }
     }
 
@@ -565,6 +598,8 @@ ping_run(const ping_config_t *config)
 
     close_raw_socket(sock);
     free(st.packet);
+    free(st.sent_times);
+    free(st.replied_or_timeout);
 
     return (st.received > 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -110,6 +110,10 @@ typedef struct {
 
     struct in_addr target_in;
     struct in_addr source_in;
+
+    u_int64_t *sent_times;
+    bool *replied_or_timeout;
+    u_short next_timeout_check_seq;
 } arping_state_t;
 
 static int
@@ -144,6 +148,12 @@ init_arping_state(const arping_config_t *config, arping_state_t *st)
     memcpy(st->target_mac_broadcast, bc, ETH_ALEN);
     memcpy(st->target_mac_zero, zero, ETH_ALEN);
     memcpy(st->current_target_mac, bc, ETH_ALEN);
+
+    st->sent_times = calloc(65536, sizeof(u_int64_t));
+    st->replied_or_timeout = calloc(65536, sizeof(bool));
+    if (!st->sent_times || !st->replied_or_timeout) {
+        die("Memory allocation failed for state tracking");
+    }
 }
 
 static bool
@@ -218,37 +228,24 @@ handle_arp_reply(const arping_config_t *config, arping_state_t *st,
     return true;
 }
 
-static bool
-recv_arping_reply(const arping_config_t *config, arping_state_t *st,
-                  u_int64_t expire, u_int64_t send_time)
+static void
+drain_arping_replies(const arping_config_t *config, arping_state_t *st)
 {
     struct pollfd pfd;
     pfd.fd = get_socket_fd(st->sock);
     pfd.events = POLLIN;
 
-    while (get_time_ns() < expire && keep_running) {
-        int64_t timeout_ns;
-        int timeout_ms;
-        int ret;
+    while (keep_running && poll(&pfd, 1, 0) > 0) {
         __attribute__((aligned(8))) u_char recv_buf[4096];
         ssize_t n;
         struct ether_header *r_eth;
         struct ether_arp *r_arp;
         u_int64_t recv_time;
-        u_int64_t rtt;
-
-        timeout_ns = expire - get_time_ns();
-        if (timeout_ns <= 0)
-            break;
-        timeout_ms = timeout_ns / NS_PER_MS;
-
-        ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 1);
-        if (ret <= 0) {
-            break;
-        }
+        u_int64_t rtt = 0;
+        u_short match_seq;
 
         if (!(pfd.revents & POLLIN))
-            continue;
+            break;
 
         n = recv_packet(st->sock, recv_buf, sizeof(recv_buf));
         if (n < 0)
@@ -271,17 +268,27 @@ recv_arping_reply(const arping_config_t *config, arping_state_t *st,
         }
 
         recv_time = get_time_ns();
-        rtt = time_diff_ns(send_time, recv_time);
+
+        match_seq = st->next_timeout_check_seq;
+        while (match_seq != (u_short)(st->sent & 0xFFFF) &&
+               st->replied_or_timeout[match_seq]) {
+            match_seq++;
+        }
+
+        if (match_seq != (u_short)(st->sent & 0xFFFF)) {
+            if (st->sent_times[match_seq] > 0 &&
+                recv_time >= st->sent_times[match_seq]) {
+                rtt = time_diff_ns(st->sent_times[match_seq], recv_time);
+            }
+            st->replied_or_timeout[match_seq] = true;
+        }
 
         if (handle_arp_reply(config, st, r_arp, rtt)) {
             if (config->dad || config->count == 1 || config->quit_on_reply) {
                 keep_running = false;
             }
-            return true;
         }
     }
-
-    return false;
 }
 
 static void
@@ -309,10 +316,13 @@ arping_run(const arping_config_t *config)
 {
     arping_state_t st;
     struct sigaction sa;
+    u_int64_t next_send_time;
 
     init_arping_state(config, &st);
 
     if (setup_arping_socket(config, &st) < 0) {
+        free(st.sent_times);
+        free(st.replied_or_timeout);
         return EXIT_FAILURE;
     }
 
@@ -345,44 +355,89 @@ arping_run(const arping_config_t *config)
         }
     }
 
-    while (keep_running && (config->count == 0 || st.sent < config->count)) {
-        u_int64_t send_time;
-        u_int64_t expire;
-        bool got_reply;
+    next_send_time = get_time_ns();
 
-        send_time = get_time_ns();
+    while (keep_running) {
+        u_int64_t now = get_time_ns();
+        int timeout_ms = 1;
+        struct pollfd pfd;
+        int ret;
 
-        if (!send_arping_probe(config, &st)) {
-            break;
+        if ((config->count == 0 || st.sent < config->count) &&
+            now >= next_send_time) {
+            u_short short_seq = (u_short)(st.sent & 0xFFFF);
+            st.sent_times[short_seq] = now;
+            st.replied_or_timeout[short_seq] = false;
+
+            if (!send_arping_probe(config, &st)) {
+                break;
+            }
+
+            next_send_time = now + config->interval_ns;
         }
 
-        expire = send_time + config->timeout_ns;
-        got_reply = recv_arping_reply(config, &st, expire, send_time);
-
-        if (!keep_running)
-            break;
-
-        if (!got_reply && !config->quiet) {
-            if (config->cisco_style) {
-                printf(".");
-                fflush(stdout);
+        now = get_time_ns();
+        while (st.next_timeout_check_seq != (u_short)(st.sent & 0xFFFF)) {
+            u_short chk_seq = st.next_timeout_check_seq;
+            if (st.replied_or_timeout[chk_seq]) {
+                st.next_timeout_check_seq++;
+                continue;
+            }
+            if (now >= st.sent_times[chk_seq] + config->timeout_ns) {
+                st.replied_or_timeout[chk_seq] = true;
+                if (!config->quiet) {
+                    if (config->cisco_style) {
+                        printf(".");
+                        fflush(stdout);
+                    } else {
+                        printf("Timeout waiting for reply from %s\n",
+                               inet_ntoa(st.target_in));
+                    }
+                }
+                st.next_timeout_check_seq++;
             } else {
-                printf("Timeout waiting for reply from %s\n",
-                       inet_ntoa(st.target_in));
+                break;
             }
         }
 
-        if (keep_running && (config->count == 0 || st.sent < config->count)) {
-            u_int64_t current = get_time_ns();
-            u_int64_t next_send = send_time + config->interval_ns;
-            if (current < next_send) {
-                usleep((next_send - current) / 1000);
+        if (config->count > 0 && st.sent >= config->count &&
+            st.next_timeout_check_seq == (u_short)(st.sent & 0xFFFF)) {
+            break;
+        }
+
+        if (config->count == 0 || st.sent < config->count) {
+            if (next_send_time > now) {
+                u_int64_t diff = next_send_time - now;
+                timeout_ms = diff / NS_PER_MS;
+                if (timeout_ms <= 0)
+                    timeout_ms = 1;
+            } else {
+                timeout_ms = 0;
             }
+        } else {
+            if (st.next_timeout_check_seq != (u_short)(st.sent & 0xFFFF)) {
+                u_int64_t to_wait = (st.sent_times[st.next_timeout_check_seq] +
+                                     config->timeout_ns) -
+                                    now;
+                timeout_ms = to_wait / NS_PER_MS;
+                if (timeout_ms <= 0)
+                    timeout_ms = 1;
+            }
+        }
+
+        pfd.fd = get_socket_fd(st.sock);
+        pfd.events = POLLIN;
+        ret = poll(&pfd, 1, timeout_ms);
+        if (ret > 0 && (pfd.revents & POLLIN)) {
+            drain_arping_replies(config, &st);
         }
     }
 
     print_arping_stats(config, &st);
     close_raw_socket(st.sock);
+
+    free(st.sent_times);
+    free(st.replied_or_timeout);
 
     if (config->dad) {
         return (st.received > 0) ? EXIT_FAILURE : EXIT_SUCCESS;

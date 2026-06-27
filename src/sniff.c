@@ -48,6 +48,7 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -454,9 +455,20 @@ sniff_run(const sniff_config_t *config)
     log_info("Sniffing on interface %s...", config->iface);
 
     while (keep_running) {
+        struct pollfd pfd;
+        int ret;
+
         if (config->max_packets > 0 &&
             st.packets_captured >= config->max_packets) {
             break;
+        }
+
+        pfd.fd = get_socket_fd(st.sock);
+        pfd.events = POLLIN;
+
+        ret = poll(&pfd, 1, 100);
+        if (ret <= 0) {
+            continue;
         }
 
         n = recv_packet(st.sock, buf, sizeof(buf));
