@@ -438,6 +438,7 @@ tcping_main(int c, char **av)
 
     prog_name = *av;
 
+    optind = 1;
     memset(&config, 0, sizeof(config));
 
     config.count = 0;

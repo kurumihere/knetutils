@@ -604,6 +604,7 @@ ping_main(int c, char **av)
     int ch;
     const char *target_ip_str;
 
+    optind = 1;
     memset(&config, 0, sizeof(config));
 
     config.count = 0;

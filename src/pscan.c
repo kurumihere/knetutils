@@ -77,12 +77,12 @@ typedef struct {
     socklen_t src_addr_len;
     char target_str[INET6_ADDRSTRLEN];
     u_short sport;
-    u_int64_t sent_time[65536];
-    u_int64_t open_rtt[65536];
-    char banners[65536][128];
-    char os_guesses[65536][32];
-    bool open_ports[65536];
-    bool closed_ports[65536];
+    u_int64_t *sent_time;
+    u_int64_t *open_rtt;
+    char (*banners)[128];
+    char (*os_guesses)[32];
+    bool *open_ports;
+    bool *closed_ports;
 } pscan_state_t;
 
 static const char *
@@ -205,7 +205,9 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
         } else {
             ((struct sockaddr_in6 *)&dst)->sin6_port = htons(dport);
         }
-        st->sent_time[dport] = get_time_ns();
+        if (dport >= config->start_port && dport <= config->end_port) {
+            st->sent_time[dport - config->start_port] = get_time_ns();
+        }
         sendto(st->send_fd, NULL, 0, 0, (struct sockaddr *)&dst,
                config->target_addr_len);
         goto out;
@@ -223,7 +225,6 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
     tcph.th_sum = 0;
 
     if (config->target_addr.ss_family == AF_INET) {
-
         struct ipv4_pseudo_header psh;
         psh.src_addr = ((struct sockaddr_in *)&st->src_addr)->sin_addr.s_addr;
         psh.dst_addr =
@@ -261,7 +262,9 @@ send_probe(const pscan_config_t *config, pscan_state_t *st, u_short dport)
     if (send_ip_raw(st->sock, &tcph, sizeof(tcph), (struct sockaddr *)&dst,
                     config->target_addr_len) < 0) {
     }
-    st->sent_time[dport] = get_time_ns();
+    if (dport >= config->start_port && dport <= config->end_port) {
+        st->sent_time[dport - config->start_port] = get_time_ns();
+    }
 out:
     return;
 }
@@ -277,6 +280,7 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
     u_int64_t rtt;
     char time_buf[64];
     const char *os_guess;
+    u_short idx;
 
     if (config->udp) {
         if (config->target_addr.ss_family == AF_INET) {
@@ -302,8 +306,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                     goto out;
                 udph = (struct udphdr *)((u_char *)orig_iph + orig_iph_len);
                 port = ntohs(udph->uh_dport);
-                if (port >= 0 && port < 65536) {
-                    st->closed_ports[port] = true;
+                if (port >= config->start_port && port <= config->end_port) {
+                    st->closed_ports[port - config->start_port] = true;
                 }
             }
         } else {
@@ -322,8 +326,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                 orig_iph = (struct ip6_hdr *)(buf + 8);
                 udph = (struct udphdr *)((u_char *)orig_iph + 40);
                 port = ntohs(udph->uh_dport);
-                if (port >= 0 && port < 65536) {
-                    st->closed_ports[port] = true;
+                if (port >= config->start_port && port <= config->end_port) {
+                    st->closed_ports[port - config->start_port] = true;
                 }
             }
         }
@@ -360,29 +364,24 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
         goto out;
 
     port = ntohs(tcph->th_sport);
-    if (port < 0 || port >= 65536)
-        goto out;
     if (port < config->start_port || port > config->end_port)
         goto out;
 
+    idx = port - config->start_port;
+
     if ((tcph->th_flags & TH_SYN) && (tcph->th_flags & TH_ACK)) {
-        if (!st->open_ports[port]) {
-            st->open_ports[port] = true;
+        if (!st->open_ports[idx]) {
+            st->open_ports[idx] = true;
             rtt = 0;
-            if (st->sent_time[port] > 0) {
-                rtt = time_diff_ns(st->sent_time[port], get_time_ns());
+            if (st->sent_time[idx] > 0) {
+                rtt = time_diff_ns(st->sent_time[idx], get_time_ns());
             }
-            st->open_rtt[port] = rtt;
+            st->open_rtt[idx] = rtt;
 
             if (config->os_fingerprint && src->ss_family == AF_INET) {
                 os_guess = guess_os_from_ttl(ttl, ntohs(tcph->th_win));
-                strncpy(st->os_guesses[port], os_guess,
-                        sizeof(st->os_guesses[port]) - 1);
-            }
-
-            if (config->banner_grab && !config->udp) {
-                grab_banner(config, port, st->banners[port & 0xFFFF],
-                            sizeof(st->banners[port & 0xFFFF]));
+                strncpy(st->os_guesses[idx], os_guess,
+                        sizeof(st->os_guesses[idx]) - 1);
             }
 
             if (!config->json_output) {
@@ -395,12 +394,8 @@ process_packet(const pscan_config_t *config, pscan_state_t *st, u_char *buf,
                                               " (time=%s)",
                        port, time_buf);
 
-                if (config->os_fingerprint && st->os_guesses[port][0] != '\0') {
-                    printf(" [OS: %s]", st->os_guesses[port]);
-                }
-
-                if (config->banner_grab && st->banners[port][0] != '\0') {
-                    printf(" [Banner: %s]", st->banners[port]);
+                if (config->os_fingerprint && st->os_guesses[idx][0] != '\0') {
+                    printf(" [OS: %s]", st->os_guesses[idx]);
                 }
 
                 printf("\n");
@@ -447,10 +442,25 @@ pscan_run(const pscan_config_t *config)
     u_int num_ports;
     u_short *port_list;
     u_int i;
+    u_short idx;
 
     st = calloc(1, sizeof(pscan_state_t));
     if (!st)
         die("Out of memory for pscan state");
+
+    num_ports = config->end_port - config->start_port + 1;
+    st->sent_time = calloc(num_ports, sizeof(*st->sent_time));
+    st->open_rtt = calloc(num_ports, sizeof(*st->open_rtt));
+    st->banners = calloc(num_ports, sizeof(*st->banners));
+    st->os_guesses = calloc(num_ports, sizeof(*st->os_guesses));
+    st->open_ports = calloc(num_ports, sizeof(*st->open_ports));
+    st->closed_ports = calloc(num_ports, sizeof(*st->closed_ports));
+
+    if (!st->sent_time || !st->open_rtt || !st->banners || !st->os_guesses ||
+        !st->open_ports || !st->closed_ports) {
+        die("Out of memory allocating scanner state arrays");
+    }
+
     init_pscan_state(config, st);
 
     if (config->udp) {
@@ -495,7 +505,6 @@ pscan_run(const pscan_config_t *config)
                  config->start_port, config->end_port, config->rate_limit);
     }
 
-    num_ports = config->end_port - config->start_port + 1;
     port_list = malloc(num_ports * sizeof(u_short));
     if (!port_list)
         die("Out of memory allocating port list");
@@ -553,42 +562,49 @@ pscan_run(const pscan_config_t *config)
         }
     }
 
+    /* Phase 2: Grab banners for open TCP ports sequentially after scanning is
+     * complete */
+    if (config->banner_grab && !config->udp) {
+        for (port = config->start_port; port <= config->end_port; port++) {
+            idx = port - config->start_port;
+            if (st->open_ports[idx]) {
+                grab_banner(config, port, st->banners[idx],
+                            sizeof(st->banners[idx]));
+            }
+        }
+    }
+
     if (config->json_output) {
         bool first = true;
         printf("{\n");
         printf("  \"target\": \"%s\",\n", st->target_str);
         printf("  \"open_ports\": [\n");
         for (port = config->start_port; port <= config->end_port; port++) {
-            if (st->open_ports[port] ||
-                (config->udp && !st->closed_ports[port])) {
+            idx = port - config->start_port;
+            if (st->open_ports[idx] ||
+                (config->udp && !st->closed_ports[idx])) {
                 if (!first) {
                     printf(",\n");
                 }
                 first = false;
                 printf("    {\n");
                 printf("      \"port\": %u", port);
-                if (!config->udp && st->open_rtt[port] > 0) {
+                if (!config->udp && st->open_rtt[idx] > 0) {
                     printf(",\n      \"rtt_ms\": %.3f",
-                           (double)st->open_rtt[port] / (double)NS_PER_MS);
+                           (double)st->open_rtt[idx] / (double)NS_PER_MS);
                     if (config->os_fingerprint &&
-                        st->os_guesses[port][0] != '\0') {
-
-                        printf(",\n      \"os_guess\": "
-                               "\"%s\"",
-                               st->os_guesses[port]);
+                        st->os_guesses[idx][0] != '\0') {
+                        printf(",\n      \"os_guess\": \"%s\"",
+                               st->os_guesses[idx]);
                     }
-                    if (config->banner_grab && st->banners[port][0] != '\0') {
-
-                        printf(",\n      \"banner\": "
-                               "\"%s\"\n",
-                               st->banners[port]);
+                    if (config->banner_grab && st->banners[idx][0] != '\0') {
+                        printf(",\n      \"banner\": \"%s\"\n",
+                               st->banners[idx]);
                     } else {
-
                         printf("\n");
                     }
                 } else if (config->udp) {
-                    printf(",\n      \"state\": "
-                           "\"open|filtered\"\n");
+                    printf(",\n      \"state\": \"open|filtered\"\n");
                 } else {
                     printf("\n");
                 }
@@ -600,17 +616,35 @@ pscan_run(const pscan_config_t *config)
     } else {
         if (config->udp) {
             for (port = config->start_port; port <= config->end_port; port++) {
-                if (!st->closed_ports[port]) {
-                    printf(COLOR_BOLD COLOR_YELLOW "Port %u is "
-                                                   "open|filtered" COLOR_RESET
-                                                   "\n",
+                idx = port - config->start_port;
+                if (!st->closed_ports[idx]) {
+                    printf(COLOR_BOLD COLOR_YELLOW
+                           "Port %u is open|filtered" COLOR_RESET "\n",
                            port);
+                }
+            }
+        } else if (config->banner_grab) {
+            bool printed_hdr = false;
+            for (port = config->start_port; port <= config->end_port; port++) {
+                idx = port - config->start_port;
+                if (st->open_ports[idx] && st->banners[idx][0] != '\0') {
+                    if (!printed_hdr) {
+                        printf("\n--- Service Banners ---\n");
+                        printed_hdr = true;
+                    }
+                    printf("Port %u banner: %s\n", port, st->banners[idx]);
                 }
             }
         }
     }
 
     free(port_list);
+    free(st->sent_time);
+    free(st->open_rtt);
+    free(st->banners);
+    free(st->os_guesses);
+    free(st->open_ports);
+    free(st->closed_ports);
     close_raw_socket(st->sock);
     if (st->send_fd >= 0) {
         close(st->send_fd);
@@ -651,6 +685,7 @@ pscan_main(int c, char **av)
     int ret = EXIT_SUCCESS;
     const char *target_ip_str;
 
+    optind = 1;
     memset(&config, 0, sizeof(config));
 
     config.family = AF_UNSPEC;
@@ -661,14 +696,12 @@ pscan_main(int c, char **av)
     while ((ch = getopt(c, av, "46jOp:r:W:I:Rsuh")) != -1) {
         switch (ch) {
         case 'u':
-
             config.udp = true;
             break;
         case 's':
             config.banner_grab = true;
             break;
         case 'O':
-
             config.os_fingerprint = true;
             break;
         case 'j':
@@ -684,7 +717,6 @@ pscan_main(int c, char **av)
             config.family = AF_INET6;
             break;
         case 'p': {
-
             char *dash = strchr(optarg, '-');
             if (dash) {
                 *dash = '\0';
