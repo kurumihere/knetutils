@@ -34,7 +34,10 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "knetutils.h"
+#include "cli.h"
+#include "net.h"
+#include "tools.h"
+#include "utils.h"
 
 #include <arpa/inet.h>
 #include <net/if_arp.h>
@@ -47,6 +50,26 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+/* --- Configuration Struct --- */
+typedef struct {
+    const char *iface;
+    u_int target_ip;
+    u_int source_ip;
+    u_char source_mac[ETH_ALEN];
+    u_int count;
+    u_int64_t timeout_ns;
+    u_int64_t interval_ns;
+    bool quiet;
+    bool unsolicited;
+    bool dad;
+    bool gateway;
+    bool cisco_style;
+    bool quit_on_reply;
+    bool use_reply;
+    bool keep_broadcast;
+    const char *time_unit;
+} arping_config_t;
 
 #ifndef IPV4_ALEN
 #define IPV4_ALEN 4

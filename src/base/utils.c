@@ -1,5 +1,5 @@
 /***************************************************************************
- * main.c -- Core knetutils CLI entry point                                *
+ * utils.c -- Shared utility functions (time, logging, formatting)         *
  *                                                                         *
  ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
  *                                                                         *
@@ -34,101 +34,114 @@
  *                                                                         *
  ***************************************************************************/
 
+#include "utils.h"
 #include "cli.h"
 #include "net.h"
-#include "tools.h"
-#include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#define MIN_ARGS 1
-#define MIN_SUBCMD_ARGS 2
-
-static const char *
-get_basename(const char *path)
+void
+log_err(const char *fmt, ...)
 {
-    const char *base = strrchr(path, '/');
+    va_list args;
 
-    return base ? base + 1 : path;
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[ERROR] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
-static void
-print_main_usage(void)
+void
+log_warn(const char *fmt, ...)
 {
-    fprintf(stderr, "knetutils - a collection of network utilities\n\n");
-    fprintf(stderr, "Usage: knetutils <command> [args]\n\n");
+    va_list args;
 
-    fprintf(stderr, "Commands:\n");
-    fprintf(stderr, "  arping      discover and probe hosts on a local network "
-                    "using ARP\n");
-    fprintf(stderr,
-            "  ping        send ICMP ECHO_REQUEST packets to network hosts\n");
-    fprintf(stderr,
-            "  pscan       fast asynchronous TCP SYN and UDP port scanner\n");
-    fprintf(
-        stderr,
-        "  sniff       capture and display packets on a network interface\n");
-    fprintf(stderr,
-            "  tcping      measure latency to a host using TCP SYN packets\n");
-    fprintf(stderr,
-            "  traceroute  print the route packets trace to network host\n\n");
-
-    fprintf(
-        stderr,
-        "Run 'knetutils <command> -h' for more information on a command.\n");
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_YELLOW "[WARN] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
-int
-main(int c, char **av)
+void
+log_info(const char *fmt, ...)
 {
-    const char *prog_name;
-    const char *cmd;
+    va_list args;
 
-    if (c < MIN_ARGS) {
-        return EXIT_FAILURE;
+    va_start(args, fmt);
+    fprintf(stdout, COLOR_BOLD COLOR_CYAN "[INFO] " COLOR_RESET);
+    vfprintf(stdout, fmt, args);
+    fprintf(stdout, "\n");
+    va_end(args);
+}
+
+void
+die(const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    fprintf(stderr, COLOR_BOLD COLOR_RED "[FATAL] " COLOR_RESET);
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+
+    exit(EXIT_FAILURE);
+}
+
+u_int64_t
+get_time_ns(void)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        die("clock_gettime failed");
     }
 
-    prog_name = get_basename(*av);
+    return (u_int64_t)ts.tv_sec * NS_PER_S + (u_int64_t)ts.tv_nsec;
+}
 
-    if (strcmp(prog_name, "arping") == 0) {
-        return arping_main(c, av);
-    } else if (strcmp(prog_name, "ping") == 0) {
-        return ping_main(c, av);
-    } else if (strcmp(prog_name, "sniff") == 0) {
-        return sniff_main(c, av);
-    } else if (strcmp(prog_name, "tcping") == 0) {
-        return tcping_main(c, av);
-    } else if (strcmp(prog_name, "traceroute") == 0) {
-        return traceroute_main(c, av);
-    } else if (strcmp(prog_name, "pscan") == 0) {
-        return pscan_main(c, av);
+u_int64_t
+time_diff_ns(u_int64_t start, u_int64_t end)
+{
+
+    if (end < start) {
+        return 0;
+    }
+    return end - start;
+}
+
+const char *
+format_time(u_int64_t time_ns, const char *unit_choice, char *buf,
+            size_t buf_size)
+{
+    if (unit_choice) {
+        if (strcmp(unit_choice, "ns") == 0) {
+
+            snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+            return buf;
+        } else if (strcmp(unit_choice, "us") == 0 ||
+                   strcmp(unit_choice, "μs") == 0) {
+            snprintf(buf, buf_size, "%.3f μs",
+                     (double)time_ns / (double)NS_PER_US);
+            return buf;
+        } else if (strcmp(unit_choice, "ms") == 0) {
+            snprintf(buf, buf_size, "%.3f ms",
+                     (double)time_ns / (double)NS_PER_MS);
+            return buf;
+        }
     }
 
-    if (c < MIN_SUBCMD_ARGS) {
-        print_main_usage();
-        return EXIT_FAILURE;
+    if (time_ns < NS_PER_US) {
+        snprintf(buf, buf_size, "%llu ns", (unsigned long long)time_ns);
+    } else if (time_ns < NS_PER_MS) {
+        snprintf(buf, buf_size, "%.3f μs", (double)time_ns / (double)NS_PER_US);
+    } else {
+        snprintf(buf, buf_size, "%.3f ms", (double)time_ns / (double)NS_PER_MS);
     }
 
-    cmd = *(av + 1);
-
-    if (strcmp(cmd, "arping") == 0) {
-        return arping_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "ping") == 0) {
-        return ping_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "sniff") == 0) {
-        return sniff_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "tcping") == 0) {
-        return tcping_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "traceroute") == 0) {
-        return traceroute_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "pscan") == 0) {
-        return pscan_main(c - 1, av + 1);
-    } else if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) {
-        print_main_usage();
-        return EXIT_SUCCESS;
-    }
-
-    fprintf(stderr, "knetutils: Unknown command '%s'\n", cmd);
-    return EXIT_FAILURE;
+    return buf;
 }

@@ -23,7 +23,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get install -y clang-format
-        clang-format --dry-run --Werror src/core/*.c src/tools/*/*.c include/*.h
+        clang-format --dry-run --Werror src/main.c src/base/*.c src/*.c include/*.h
 
     - name: Test CLI Interfaces
       run: |

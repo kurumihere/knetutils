@@ -34,10 +34,12 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "knetutils.h"
+#include "cli.h"
+#include "net.h"
+#include "tools.h"
+#include "utils.h"
 
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netdb.h>
 #include <netinet/icmp6.h>
 #include <netinet/ip.h>
@@ -49,6 +51,32 @@
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+/* --- Configuration Struct --- */
+#define PING_MAX_PATTERN_LEN 16
+
+typedef struct {
+    u_int count;
+    u_int64_t timeout_ns;
+    u_int64_t interval_ns;
+    u_int payload_size;
+    u_char ttl;
+    bool quiet;
+    const char *time_unit;
+    struct sockaddr_storage target_addr;
+    socklen_t target_addr_len;
+    int family;
+    bool cisco_style;
+    bool flood;
+    bool audible;
+    bool adaptive;
+    const char *bind_iface;
+    u_char pattern[PING_MAX_PATTERN_LEN];
+    size_t pattern_len;
+    u_int64_t deadline_ns;
+    int tos;
+    bool has_tos;
+} ping_config_t;
 
 static volatile sig_atomic_t keep_running = 1;
 
@@ -589,7 +617,6 @@ ping_main(int c, char **av)
     while ((ch = getopt(c, av, "46c:w:W:i:u:s:p:Q:t:I:aAqChf")) != -1) {
         switch (ch) {
         case '4':
-
             config.family = AF_INET;
             break;
         case '6':
@@ -630,7 +657,6 @@ ping_main(int c, char **av)
             config.payload_size = (u_int)atoi(optarg);
             break;
         case 'p': {
-
             size_t len = strlen(optarg);
             size_t i;
             if (len > 32)

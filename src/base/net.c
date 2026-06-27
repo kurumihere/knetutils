@@ -34,7 +34,9 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "knetutils.h"
+#include "net.h"
+#include "cli.h"
+#include "utils.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
