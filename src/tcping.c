@@ -55,73 +55,6 @@
 
 /* --- Configuration Struct --- */
 typedef struct {
-    const char *iface;
-    u_int target_ip;
-    u_int source_ip;
-    u_char source_mac[ETH_ALEN];
-    u_int count;
-    u_int64_t timeout_ns;
-    u_int64_t interval_ns;
-    bool quiet;
-    bool unsolicited;
-    bool dad;
-    bool gateway;
-    bool cisco_style;
-    bool quit_on_reply;
-    bool use_reply;
-    bool keep_broadcast;
-    const char *time_unit;
-} arping_config_t;
-
-#define PING_MAX_PATTERN_LEN 16
-
-typedef struct {
-    u_int count;
-    u_int64_t timeout_ns;
-    u_int64_t interval_ns;
-    u_int payload_size;
-    u_char ttl;
-    bool quiet;
-    const char *time_unit;
-    struct sockaddr_storage target_addr;
-    socklen_t target_addr_len;
-    int family;
-    bool cisco_style;
-    bool flood;
-    bool audible;
-    bool adaptive;
-    const char *bind_iface;
-    u_char pattern[PING_MAX_PATTERN_LEN];
-    size_t pattern_len;
-    u_int64_t deadline_ns;
-    int tos;
-    bool has_tos;
-} ping_config_t;
-
-typedef struct {
-    u_short start_port;
-    u_short end_port;
-    u_int64_t timeout_ns;
-    struct sockaddr_storage target_addr;
-    socklen_t target_addr_len;
-    int family;
-    const char *bind_iface;
-    u_int rate_limit;
-    bool udp;
-    bool randomize;
-    bool json_output;
-    bool banner_grab;
-    bool os_fingerprint;
-} pscan_config_t;
-
-typedef struct {
-    const char *iface;
-    int max_packets;
-    int verbosity;
-    const char *pcap_file;
-} sniff_config_t;
-
-typedef struct {
     u_short port;
     u_int count;
     u_int64_t timeout_ns;
@@ -159,22 +92,6 @@ handle_sigint(int sig)
     (void)sig;
     keep_running = 0;
 }
-
-struct ipv4_pseudo_header {
-    u_int src_addr;
-    u_int dst_addr;
-    u_char zero;
-    u_char protocol;
-    u_short tcp_length;
-} __attribute__((packed));
-
-struct ipv6_pseudo_header {
-    struct in6_addr src_addr;
-    struct in6_addr dst_addr;
-    u_int tcp_length;
-    u_char zero[3];
-    u_char next_header;
-} __attribute__((packed));
 
 typedef struct {
     u_short sport;

@@ -37,9 +37,26 @@
 #ifndef KNETUTILS_NET_H
 #define KNETUTILS_NET_H
 
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+struct ipv4_pseudo_header {
+    u_int src_addr;
+    u_int dst_addr;
+    u_char zero;
+    u_char protocol;
+    u_short tcp_length;
+} __attribute__((packed));
+
+struct ipv6_pseudo_header {
+    struct in6_addr src_addr;
+    struct in6_addr dst_addr;
+    u_int tcp_length;
+    u_char zero[3];
+    u_char next_header;
+} __attribute__((packed));
 
 /* --- Networking helper declarations --- */
 #ifndef ETH_ALEN
