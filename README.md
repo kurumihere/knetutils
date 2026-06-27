@@ -19,7 +19,7 @@ CLI parsing routines while maintaining a tiny footprint.
 | *`tcping`* | Measure network latency using TCP connection establishment. | Latency to specific TCP ports, custom timeout and interval settings |
 | *`traceroute`* | Trace the route and hop latency to a network host. | ICMP Echo or UDP probes, domain name resolution, custom max/first TTL |
 
-## Build & Installation
+## Build
 
 ### Prerequisites
 
@@ -47,28 +47,6 @@ Verify build correctness against local loopbacks or network interfaces:
 make test
 ```
 
-### 3. Install System-Wide
-
-Install the binary, the symbolic links, and the system man pages:
-
-```bash
-make install
-```
-
-By default, this installs to `/usr/local/bin` and `/usr/local/share/man/man8/`. You can customize the install prefix using:
-
-```bash
-make PREFIX=<your-prefix> install
-```
-
-### 4. Uninstall
-
-To clean system-wide installation files:
-
-```bash
-make uninstall
-```
-
 ## Command Usage & Examples
 
 You can run any utility in two ways:
@@ -81,11 +59,11 @@ You can run any utility in two ways:
 ### `arping`
 Discover hosts on a local network interface using ARP requests.
 ```bash
-# Discover a host on interface eth0
-sudo arping -I eth0 192.168.1.1
+# Discover a host on interface enp7s0
+sudo arping -I enp7s0 192.168.1.1
 
 # Run Duplicate Address Detection (DAD)
-sudo arping -I eth0 -d 192.168.1.50
+sudo arping -I enp7s0 -d 192.168.1.50
 ```
 
 ### `ping`
@@ -114,11 +92,11 @@ sudo pscan -p 1-1000 -j 192.168.1.1
 ### `sniff`
 Sniff and analyze live network packets on an interface.
 ```bash
-# Capture packets on interface eth0 with payload hex-dump
-sudo sniff -I eth0 -vv
+# Capture packets on interface enp7s0 with payload hex-dump
+sudo sniff -I enp7s0 -vv
 
 # Capture 100 packets and write them to a PCAP file for Wireshark analysis
-sudo sniff -I eth0 -c 100 -w capture.pcap
+sudo sniff -I enp7s0 -c 100 -w capture.pcap
 ```
 
 ### `tcping`
