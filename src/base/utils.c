@@ -1,7 +1,7 @@
 /***************************************************************************
  * utils.c -- Shared utility functions (time, logging, formatting)         *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

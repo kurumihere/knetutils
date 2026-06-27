@@ -1,7 +1,7 @@
 /***************************************************************************
- * knetutils.h -- Unified header for knetutils suite                       *
+ * cli.h -- CLI formatting and argument parsing declarations               *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

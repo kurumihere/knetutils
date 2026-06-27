@@ -1,7 +1,7 @@
 /***************************************************************************
  * ping.c -- ICMP ping utility logic                                       *
  *                                                                         *
- ************************IMPORTANT KNETUTILS LICENSE TERMS********************
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

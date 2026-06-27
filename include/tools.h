@@ -1,7 +1,7 @@
 /***************************************************************************
- * knetutils.h -- Unified header for knetutils suite                       *
+ * tools.h -- Declarations for knetutils tool entry points                 *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

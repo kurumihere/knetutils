@@ -1,7 +1,7 @@
 /***************************************************************************
  * net.c -- Cross-platform network abstractions and raw sockets            *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

@@ -1,7 +1,7 @@
 /***************************************************************************
- * knetutils.h -- Unified header for knetutils suite                       *
+ * net.h -- Network abstractions and raw socket declarations               *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

@@ -1,7 +1,7 @@
 /***************************************************************************
  * cli.c -- CLI formatting and argument parsing helpers                    *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *

@@ -1,7 +1,7 @@
 /***************************************************************************
- * knetutils.h -- Unified header for knetutils suite                       *
+ * utils.h -- Shared utility function declarations                         *
  *                                                                         *
- ***********************IMPORTANT KNETUTILS LICENSE TERMS******************* *
+ *********************IMPORTANT KNETUTILS LICENSE TERMS*********************
  *                                                                         *
  * knetutils is (C) 2026 kurumihere                                        *
  *                                                                         *
